@@ -1,8 +1,8 @@
 Package: com.dsh.dr4wreborn
-Name: Dr4w Reborn
+Name: 全局画板
 Version: 0.1.0
 Architecture: iphoneos-arm64
-Description: Source-level reimplementation of Dr4w's draw-anywhere overlay on top of ACEDrawingView (Apache/MIT engine). Open source, fully editable.
+Description: 全局画板 —— 任意界面手绘标注，基于 ACEDrawingView，开源可改。
 Maintainer: dsh
 Author: dsh
 Section: Tweaks

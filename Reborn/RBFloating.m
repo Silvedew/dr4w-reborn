@@ -3,41 +3,15 @@
 #import "RBPrefs.h"
 
 #import <QuartzCore/QuartzCore.h>
+#import <notify.h>
 
 static CGFloat const kSize = 56.0;
 
-#pragma mark - pass-through window
-
-/* The window itself must return nil for touches that miss the ball, otherwise
-   UIWindow falls back to "return self" and swallows the whole screen. */
-@interface RBFloatWindow : UIWindow
-@end
-
-@implementation RBFloatWindow
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *v = [super hitTest:point withEvent:event];
-    if (v == self) return nil;
-    return v;
-}
-@end
-
-@interface RBFloatRoot : UIView
-@end
-
-@implementation RBFloatRoot
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *v = [super hitTest:point withEvent:event];
-    return (v == self) ? nil : v;
-}
-@end
-
-#pragma mark - floating ball
-
 @implementation RBFloating {
-    RBFloatWindow *_win;
-    UIView *_ball;
+    UIWindow *_win;          /* exactly as big as the ball */
+    UIView   *_ball;
     UIButton *_btn;
-    BOOL _userHidden;
+    BOOL      _userHidden;
 }
 
 + (instancetype)shared {
@@ -61,21 +35,22 @@ static CGFloat const kSize = 56.0;
 - (void)buildIfNeeded {
     if (_win) return;
 
-    _win = [[RBFloatWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    CGPoint c = [RBPrefs floatCenter];
+    _win = [[UIWindow alloc] initWithFrame:CGRectMake(c.x - kSize / 2.0,
+                                                      c.y - kSize / 2.0,
+                                                      kSize, kSize)];
     _win.windowScene = [self activeScene];
-    _win.windowLevel = UIWindowLevelAlert + 9.0;
+    _win.windowLevel = UIWindowLevelAlert + 900.0;
     _win.backgroundColor = [UIColor clearColor];
 
-    RBFloatRoot *root = [[RBFloatRoot alloc] initWithFrame:_win.bounds];
-    root.backgroundColor = [UIColor clearColor];
-
     UIViewController *vc = [[UIViewController alloc] init];
-    vc.view = root;
+    vc.view = [[UIView alloc] initWithFrame:_win.bounds];
+    vc.view.backgroundColor = [UIColor clearColor];
     _win.rootViewController = vc;
 
-    /* frosted glass ball */
-    _ball = [[UIView alloc] initWithFrame:CGRectMake(0, 0, kSize, kSize)];
+    _ball = [[UIView alloc] initWithFrame:_win.bounds];
     _ball.backgroundColor = [UIColor clearColor];
+    [_win.rootViewController.view addSubview:_ball];
 
     UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:
                                  [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialLight]];
@@ -113,22 +88,11 @@ static CGFloat const kSize = 56.0;
     [_btn addGestureRecognizer:press];
 
     [_ball addSubview:_btn];
-    [root addSubview:_ball];
-
-    CGPoint c = [RBPrefs floatCenter];
-    CGFloat half = kSize / 2.0;
-    if (c.x < half) c.x = half;
-    if (c.y < half) c.y = half;
-    if (c.x > root.bounds.size.width - half) c.x = root.bounds.size.width - half;
-    if (c.y > root.bounds.size.height - half) c.y = root.bounds.size.height - half;
-    _ball.center = c;
 }
 
 - (void)show {
     [self buildIfNeeded];
     _userHidden = NO;
-    _win.frame = [UIScreen mainScreen].bounds;
-    _win.rootViewController.view.frame = _win.bounds;
     _win.hidden = NO;
 }
 
@@ -145,34 +109,32 @@ static CGFloat const kSize = 56.0;
     if (g.state != UIGestureRecognizerStateBegan) return;
     _userHidden = YES;
     _win.hidden = YES;
-    NSLog(@"[Dr4wReborn] floating ball hidden");
+    NSLog(@"[Dr4wReborn] ball hidden");
 }
 
 - (void)panned:(UIPanGestureRecognizer *)g {
-    UIView *host = _ball.superview;
-    if (!host) return;
+    if (!_win) return;
 
-    CGPoint t = [g translationInView:host];
-    CGPoint c = _ball.center;
-    c.x += t.x;
-    c.y += t.y;
+    CGPoint t = [g translationInView:_win];
+    CGRect f = _win.frame;
+    f.origin.x += t.x;
+    f.origin.y += t.y;
 
-    CGFloat half = kSize / 2.0;
-    if (c.x < half + 8.0) c.x = half + 8.0;
-    if (c.y < half + 8.0) c.y = half + 8.0;
-    if (c.x > host.bounds.size.width - half - 8.0) c.x = host.bounds.size.width - half - 8.0;
-    if (c.y > host.bounds.size.height - half - 8.0) c.y = host.bounds.size.height - half - 8.0;
-
-    _ball.center = c;
+    CGRect screen = [UIScreen mainScreen].bounds;
+    if (f.origin.x < 8.0) f.origin.x = 8.0;
+    if (f.origin.y < 8.0) f.origin.y = 8.0;
+    if (f.origin.x > screen.size.width - kSize - 8.0) f.origin.x = screen.size.width - kSize - 8.0;
+    if (f.origin.y > screen.size.height - kSize - 8.0) f.origin.y = screen.size.height - kSize - 8.0;
+    _win.frame = f;
 
     CGPoint zero;
     zero.x = 0.0;
     zero.y = 0.0;
-    [g setTranslation:zero inView:host];
+    [g setTranslation:zero inView:_win];
 
     if (g.state == UIGestureRecognizerStateEnded ||
         g.state == UIGestureRecognizerStateCancelled) {
-        [RBPrefs setFloatCenter:c];
+        [RBPrefs setFloatCenter:CGPointMake(CGRectGetMidX(f), CGRectGetMidY(f))];
     }
 }
 

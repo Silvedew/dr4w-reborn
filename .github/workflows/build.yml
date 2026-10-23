@@ -53,6 +53,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Publish Sileo repo (gh-pages)
+        run: |
+          set -euxo pipefail
+          rm -rf site
+          mkdir -p site
+          cp Dr4wReborn_*.deb site/
+          DEB=$(basename "$(ls site/*.deb | head -1)")
+          SIZE=$(stat -f%z "site/$DEB")
+          MD5=$(md5 -q "site/$DEB")
+          SHA=$(shasum -a 256 "site/$DEB" | awk '{print $1}')
+
+          printf 'Package: com.dsh.dr4wreborn\nName: Dr4w Reborn\nVersion: %s\nArchitecture: iphoneos-arm64\nDescription: Dr4w 风格的全屏画板，开源可改\nMaintainer: dsh\nAuthor: dsh\nSection: Tweaks\nDepends: mobilesubstrate | ellekit\nFilename: ./%s\nSize: %s\nMD5sum: %s\nSHA256: %s\n\n' \
+            "${VERSION}" "${DEB}" "${SIZE}" "${MD5}" "${SHA}" > site/Packages
+          gzip -c site/Packages > site/Packages.gz
+
+          printf 'Origin: Dr4wReborn\nLabel: Dr4w Reborn\nSuite: stable\nVersion: 1.0\nCodename: ios\nArchitectures: iphoneos-arm64\nComponents: main\nDescription: Dr4w Reborn 自建源\n' > site/Release
+
+          cd site
+          git init -q
+          git checkout -q -b gh-pages
+          git add -A
+          git -c user.name=actions -c user.email=actions@github.com commit -qm "build ${VERSION}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Upload artifact (backup)
         uses: actions/upload-artifact@v4
         with:

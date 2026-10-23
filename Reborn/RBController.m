@@ -5,6 +5,8 @@
 
 #import "ACEDrawingView.h"
 #import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 
 #pragma mark - quick colour palette (4 circles)
 
@@ -197,7 +199,56 @@
         if (drawing) [drawing drawInRect:CGRectMake(0, 0, size.width, size.height)];
     }];
 
-    NSData *png = UIImagePNGRepresentation(flat);
+    [self saveToAlbum:flat];
+}
+
+/* Saves through Photos.framework looked up at runtime (no link dependency).
+   Apps whose Info.plist lacks NSPhotoLibraryAddUsageDescription would crash
+   inside TCC, so those fall back to a file. */
+- (void)saveToAlbum:(UIImage *)image {
+    NSString *usage = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSPhotoLibraryAddUsageDescription"];
+    Class libClass = NSClassFromString(@"PHPhotoLibrary");
+    Class reqClass = NSClassFromString(@"PHAssetChangeRequest");
+
+    if (!usage || !libClass || !reqClass) {
+        [self saveToFile:image];
+        [self toast:@"该 App 未开放相册，已存文件"];
+        return;
+    }
+
+    id library = ((id (*)(id, SEL))objc_msgSend)((id)libClass,
+                                                 sel_registerName("sharedPhotoLibrary"));
+    if (!library) {
+        [self saveToFile:image];
+        [self toast:@"保存失败，已存文件"];
+        return;
+    }
+
+    void (^changes)(void) = ^{
+        ((id (*)(id, SEL, id))objc_msgSend)((id)reqClass,
+                                           sel_registerName("creationRequestForAssetFromImage:"),
+                                           image);
+    };
+    __weak typeof(self) weakSelf = self;
+    void (^completion)(BOOL, NSError *) = ^(BOOL success, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) s = weakSelf;
+            if (!s) return;
+            if (success) {
+                [s toast:@"已保存到相册"];
+            } else {
+                [s saveToFile:image];
+                [s toast:@"相册未授权，已存文件"];
+            }
+        });
+    };
+    ((void (*)(id, SEL, id, id))objc_msgSend)(library,
+                                             sel_registerName("performChanges:completionHandler:"),
+                                             changes, completion);
+}
+
+- (void)saveToFile:(UIImage *)image {
+    NSData *png = UIImagePNGRepresentation(image);
     NSString *dir = RBIsSpringBoard()
         ? @"/var/mobile/Media/Dr4wReborn"
         : [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
@@ -209,13 +260,37 @@
     NSString *path = [dir stringByAppendingPathComponent:
                       [NSString stringWithFormat:@"shot-%.0f.png",
                        [[NSDate date] timeIntervalSince1970]]];
-    BOOL ok = [png writeToFile:path atomically:YES];
+    [png writeToFile:path atomically:YES];
+}
 
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:(ok ? @"已保存" : @"保存失败")
-                                                               message:path
-                                                        preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:a animated:YES completion:nil];
+- (void)toast:(NSString *)text {
+    UILabel *label = [[UILabel alloc] init];
+    label.text = text;
+    label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
+    label.textColor = [UIColor whiteColor];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.78];
+    label.layer.cornerRadius = 16.0;
+    label.layer.cornerCurve = kCACornerCurveContinuous;
+    label.clipsToBounds = YES;
+
+    CGSize fit = [label sizeThatFits:CGSizeMake(360.0, 44.0)];
+    CGFloat w = fit.width + 36.0;
+    CGFloat h = 38.0;
+    label.frame = CGRectMake((self.view.bounds.size.width - w) / 2.0,
+                             self.view.bounds.size.height - 100.0, w, h);
+    label.alpha = 0.0;
+    [self.view addSubview:label];
+
+    [UIView animateWithDuration:0.18 animations:^{
+        label.alpha = 1.0;
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.3 delay:1.2 options:0 animations:^{
+            label.alpha = 0.0;
+        } completion:^(BOOL done) {
+            [label removeFromSuperview];
+        }];
+    }];
 }
 
 #pragma mark - colour

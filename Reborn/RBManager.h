@@ -1,5 +1,7 @@
 #import <UIKit/UIKit.h>
 
+void RBWriteLog(NSString *text);
+
 @interface RBManager : NSObject
 
 + (instancetype)shared;

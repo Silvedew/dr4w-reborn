@@ -235,6 +235,19 @@ static void RBBootstrap(void) {
                     usingBlock:^(NSNotification *note) {
             [[RBFloating shared] hide];
         }];
+        /* split view: activate/deactivate decides which app owns the ball */
+        [nc addObserverForName:UISceneDidActivateNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+            [[RBFloating shared] refreshVisibility];
+        }];
+        [nc addObserverForName:UISceneWillDeactivateNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+            [[RBFloating shared] hide];
+        }];
         [[RBFloating shared] refreshVisibility];
     });
 }

@@ -104,12 +104,21 @@
     return [RBPrefs isAppDisabled:[[NSBundle mainBundle] bundleIdentifier]];
 }
 
+- (BOOL)sceneActive {
+    if (!_win) return YES;
+    UIWindowScene *ws = (UIWindowScene *)_win.windowScene;
+    if (!ws) return YES;
+    return ws.activationState == UISceneActivationStateForegroundActive;
+}
+
 - (void)show {
     /* SpringBoard never owns a ball: it would float above apps as a dead twin */
     if (RBIsSpringBoard()) { _win.hidden = YES; return; }
     if ([self disabledHere]) { _win.hidden = YES; return; }
     @try {
         [self buildIfNeeded];
+        /* split view: only the focused app shows a ball, so there is one */
+        if (![self sceneActive]) { _win.hidden = YES; return; }
         _userHidden = NO;
         _win.hidden = NO;
         [self applyPrefs];

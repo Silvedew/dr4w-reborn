@@ -6,8 +6,21 @@
 
 static CGFloat const kSize = 56.0;
 
-/* Transparent full-screen window whose root view only lets touches through
-   to the floating button. */
+#pragma mark - pass-through window
+
+/* The window itself must return nil for touches that miss the ball, otherwise
+   UIWindow falls back to "return self" and swallows the whole screen. */
+@interface RBFloatWindow : UIWindow
+@end
+
+@implementation RBFloatWindow
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *v = [super hitTest:point withEvent:event];
+    if (v == self) return nil;
+    return v;
+}
+@end
+
 @interface RBFloatRoot : UIView
 @end
 
@@ -18,9 +31,12 @@ static CGFloat const kSize = 56.0;
 }
 @end
 
+#pragma mark - floating ball
+
 @implementation RBFloating {
-    UIWindow *_win;
+    RBFloatWindow *_win;
     UIButton *_btn;
+    BOOL _userHidden;
 }
 
 + (instancetype)shared {
@@ -44,7 +60,7 @@ static CGFloat const kSize = 56.0;
 - (void)buildIfNeeded {
     if (_win) return;
 
-    _win = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    _win = [[RBFloatWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     _win.windowScene = [self activeScene];
     _win.windowLevel = UIWindowLevelAlert + 9.0;
     _win.backgroundColor = [UIColor clearColor];
@@ -72,9 +88,16 @@ static CGFloat const kSize = 56.0;
     [_btn setImage:icon forState:UIControlStateNormal];
 
     [_btn addTarget:self action:@selector(tapped) forControlEvents:UIControlEventTouchUpInside];
+
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self
                                                                          action:@selector(panned:)];
     [_btn addGestureRecognizer:pan];
+
+    UILongPressGestureRecognizer *press =
+        [[UILongPressGestureRecognizer alloc] initWithTarget:self
+                                                      action:@selector(longPressed:)];
+    press.minimumPressDuration = 0.6;
+    [_btn addGestureRecognizer:press];
 
     CGPoint c = [RBPrefs floatCenter];
     CGFloat half = kSize / 2.0;
@@ -89,6 +112,7 @@ static CGFloat const kSize = 56.0;
 
 - (void)show {
     [self buildIfNeeded];
+    _userHidden = NO;
     _win.frame = [UIScreen mainScreen].bounds;
     _win.rootViewController.view.frame = _win.bounds;
     _win.hidden = NO;
@@ -99,7 +123,15 @@ static CGFloat const kSize = 56.0;
 }
 
 - (void)tapped {
+    if (_userHidden) return;
     [[RBManager shared] toggle];
+}
+
+- (void)longPressed:(UILongPressGestureRecognizer *)g {
+    if (g.state != UIGestureRecognizerStateBegan) return;
+    _userHidden = YES;
+    _win.hidden = YES;
+    NSLog(@"[Dr4wReborn] floating ball hidden");
 }
 
 - (void)panned:(UIPanGestureRecognizer *)g {

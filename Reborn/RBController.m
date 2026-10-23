@@ -1,6 +1,7 @@
 #import "RBController.h"
 #import "RBManager.h"
 #import "RBPrefs.h"
+#import "RBFloating.h"
 
 #import "ACEDrawingView.h"
 #import <QuartzCore/QuartzCore.h>
@@ -325,6 +326,20 @@
     [sheet addAction:[UIAlertAction actionWithTitle:@"线条粗细"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showWidths]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"悬浮球大小"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) { [self showBallSize]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"悬浮球透明度"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) { [self showBallAlpha]; }]];
+    if (!RBIsSpringBoard()) {
+        NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+        BOOL disabled = [RBPrefs isAppDisabled:bid];
+        [sheet addAction:[UIAlertAction actionWithTitle:(disabled ? @"在本 App 显示悬浮球"
+                                                                 : @"在本 App 隐藏悬浮球")
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *a) { [self toggleAppBall]; }]];
+    }
     [sheet addAction:[UIAlertAction actionWithTitle:@"一键清屏"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *a) { [self->_drawView clear]; }]];
@@ -357,6 +372,51 @@
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self anchor:sheet to:_gear];
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)showBallSize {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"悬浮球大小"
+                                                                  message:nil
+                                                           preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSNumber *> *sizes = @[@44.0, @56.0, @64.0];
+    NSArray<NSString *> *names = @[@"小", @"中", @"大"];
+    for (NSUInteger i = 0; i < sizes.count; i++) {
+        [sheet addAction:[UIAlertAction actionWithTitle:names[i]
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *a) {
+            [RBPrefs setBallSize:sizes[i].doubleValue];
+            [[RBFloating shared] applyPrefs];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self anchor:sheet to:_gear];
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)showBallAlpha {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"悬浮球透明度"
+                                                                  message:nil
+                                                           preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSNumber *> *values = @[@0.6, @0.8, @1.0];
+    NSArray<NSString *> *names = @[@"60%", @"80%", @"100%"];
+    for (NSUInteger i = 0; i < values.count; i++) {
+        [sheet addAction:[UIAlertAction actionWithTitle:names[i]
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *a) {
+            [RBPrefs setBallAlpha:values[i].doubleValue];
+            [[RBFloating shared] applyPrefs];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self anchor:sheet to:_gear];
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)toggleAppBall {
+    NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+    BOOL disabled = [RBPrefs isAppDisabled:bid];
+    [RBPrefs setAppDisabled:bid disabled:!disabled];
+    [[RBFloating shared] refreshVisibility];
 }
 
 - (void)showWidths {

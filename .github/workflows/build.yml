@@ -68,11 +68,11 @@ jobs:
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           BASE="https://${OWNER}.github.io/${REPO_NAME}"
 
-          printf 'Package: com.dsh.dr4wreborn\nName: Dr4w Reborn\nVersion: %s\nArchitecture: iphoneos-arm64\nDescription: Dr4w 风格的全屏画板，开源可改\nMaintainer: dsh\nAuthor: dsh\nSection: Tweaks\nDepends: mobilesubstrate | ellekit\nFilename: %s/%s\nSize: %s\nMD5sum: %s\nSHA256: %s\n\n' \
+          printf 'Package: com.dsh.dr4wreborn\nName: 全局画板\nVersion: %s\nArchitecture: iphoneos-arm64\nDescription: 全局画板 —— 任意界面手绘标注，开源可改\nMaintainer: dsh\nAuthor: dsh\nSection: Tweaks\nDepends: mobilesubstrate | ellekit\nFilename: %s/%s\nSize: %s\nMD5sum: %s\nSHA256: %s\n\n' \
             "${VERSION}" "${BASE}" "${DEB}" "${SIZE}" "${MD5}" "${SHA}" > site/Packages
           gzip -c site/Packages > site/Packages.gz
 
-          printf 'Origin: Dr4wReborn\nLabel: Dr4w Reborn\nSuite: stable\nVersion: 1.0\nCodename: ios\nArchitectures: iphoneos-arm64\nComponents: main\nDescription: Dr4w Reborn 自建源\n' > site/Release
+          printf 'Origin: Dr4wReborn\nLabel: 全局画板\nSuite: stable\nVersion: 1.0\nCodename: ios\nArchitectures: iphoneos-arm64\nComponents: main\nDescription: 全局画板 自建源\n' > site/Release
 
           cd site
           git init -q

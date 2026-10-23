@@ -25,6 +25,21 @@ BOOL RBIsSpringBoard(void) {
     return [[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"];
 }
 
+/* Split View / Slide Over: the scene only owns part of the screen, so every
+   overlay must live inside this rect instead of the full screen. */
+CGRect RBHostBounds(void) {
+    for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+        if (![s isKindOfClass:[UIWindowScene class]]) continue;
+        if (s.activationState == UISceneActivationStateForegroundActive)
+            return ((UIWindowScene *)s).coordinateSpace.bounds;
+    }
+    for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+        if ([s isKindOfClass:[UIWindowScene class]])
+            return ((UIWindowScene *)s).coordinateSpace.bounds;
+    }
+    return [UIScreen mainScreen].bounds;
+}
+
 @interface RBManager ()
 - (void)toggle;
 @end
@@ -63,7 +78,7 @@ BOOL RBIsSpringBoard(void) {
 
     _previousKey = [UIApplication sharedApplication].keyWindow;
 
-    RBWindow *w = [[RBWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    RBWindow *w = [[RBWindow alloc] initWithFrame:RBHostBounds()];
     w.windowScene = [self activeScene];
     w.windowLevel = UIWindowLevelAlert + 1000.0;
     w.backgroundColor = [UIColor clearColor];
@@ -98,6 +113,11 @@ BOOL RBIsSpringBoard(void) {
 - (void)toggle {
     if ([self isShowing]) [self dismiss];
     else [self present];
+}
+
+- (void)layoutForCurrentHost {
+    if (_window) _window.frame = RBHostBounds();
+    [[RBFloating shared] applyPrefs];
 }
 
 @end
@@ -170,6 +190,13 @@ static void RBBootstrap(void) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIWindowSceneDidUpdateCoordinateSpaceNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification *note) {
+            [[RBManager shared] layoutForCurrentHost];
+        }];
+
         if (RBIsSpringBoard()) {
             /* SpringBoard: volume trigger only, no ball */
             int token = 0;

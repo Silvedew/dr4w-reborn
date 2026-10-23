@@ -17,14 +17,28 @@
     UIButton *_btn;
     BOOL      _userHidden;
     BOOL      _snapped;
+    BOOL      _frontmost;
     NSInteger _fadeGen;
 }
 
 + (instancetype)shared {
     static RBFloating *shared = nil;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ shared = [[RBFloating alloc] init]; });
+    dispatch_once(&once, ^{
+        shared = [[RBFloating alloc] init];
+        shared->_frontmost = YES;
+    });
     return shared;
+}
+
+- (void)setFrontmost:(BOOL)frontmost {
+    if (_frontmost == frontmost) return;
+    _frontmost = frontmost;
+    if (!frontmost) {
+        _win.hidden = YES;
+    } else if (![[RBManager shared] isShowing]) {
+        [self refreshVisibility];
+    }
 }
 
 - (UIWindowScene *)activeScene {
@@ -115,6 +129,7 @@
     /* SpringBoard never owns a ball: it would float above apps as a dead twin */
     if (RBIsSpringBoard()) { _win.hidden = YES; return; }
     if ([self disabledHere]) { _win.hidden = YES; return; }
+    if (!_frontmost) { _win.hidden = YES; return; }
     @try {
         [self buildIfNeeded];
         /* split view: only the focused app shows a ball, so there is one */

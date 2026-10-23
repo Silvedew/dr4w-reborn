@@ -10,6 +10,7 @@
     UIView         *_bar;
     UIButton       *_gear;
     UIButton       *_undo;
+    UIButton       *_clear;
     UIButton       *_shot;
     UIButton       *_close;
 }
@@ -35,10 +36,6 @@
     [self buildBar];
 }
 
-- (BOOL)prefersStatusBarHidden {
-    return NO;
-}
-
 #pragma mark - toolbar
 
 - (UIButton *)barButton:(NSString *)symbol action:(SEL)action {
@@ -56,7 +53,7 @@
 
 - (void)buildBar {
     CGFloat bw = 56.0;
-    CGFloat bh = 4.0 * 52.0 + 16.0;
+    CGFloat bh = 5.0 * 52.0 + 16.0;
     CGRect f;
     f.origin.x = self.view.bounds.size.width - bw - 8.0;
     f.origin.y = (self.view.bounds.size.height - bh) / 2.0;
@@ -74,10 +71,11 @@
 
     _gear  = [self barButton:@"gearshape" action:@selector(settingsTapped:)];
     _undo  = [self barButton:@"arrow.uturn.backward" action:@selector(undoTapped:)];
+    _clear = [self barButton:@"trash" action:@selector(clearTapped:)];
     _shot  = [self barButton:@"camera" action:@selector(shotTapped:)];
     _close = [self barButton:@"xmark.circle.fill" action:@selector(closeTapped:)];
 
-    NSArray<UIButton *> *buttons = @[_gear, _undo, _shot, _close];
+    NSArray<UIButton *> *buttons = @[_gear, _undo, _clear, _shot, _close];
     for (NSUInteger i = 0; i < buttons.count; i++) {
         UIButton *b = buttons[i];
         b.frame = CGRectMake(6.0, 8.0 + i * 52.0, 44.0, 44.0);
@@ -89,6 +87,10 @@
 
 - (void)undoTapped:(UIButton *)sender {
     [_drawView undoLatestStep];
+}
+
+- (void)clearTapped:(UIButton *)sender {
+    [_drawView clear];
 }
 
 - (void)closeTapped:(UIButton *)sender {
@@ -117,10 +119,10 @@
                        [[NSDate date] timeIntervalSince1970]]];
     BOOL ok = [png writeToFile:path atomically:YES];
 
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:(ok ? @"Saved" : @"Save failed")
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:(ok ? @"已保存" : @"保存失败")
                                                                message:path
                                                         preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
@@ -136,30 +138,30 @@
 }
 
 - (void)settingsTapped:(UIButton *)sender {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Dr4w Reborn"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"绘图设置"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Tool: %@", [RBPrefs toolName]]
+    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"工具：%@", [RBPrefs toolName]]
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showTools]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Line color"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"线条颜色"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showColors]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Line width"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"线条粗细"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showWidths]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Clear canvas"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"一键清屏"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *a) { [self->_drawView clear]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
     [self anchor:sheet to:sender];
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)showTools {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Draw tool"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"绘图工具"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSString *> *names = [RBPrefs toolNames];
@@ -178,17 +180,16 @@
             self->_drawView.drawTool = t;
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self anchor:sheet to:_gear];
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)showColors {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Line color"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"线条颜色"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray<NSString *> *names = @[@"Black", @"White", @"Red", @"Orange", @"Yellow",
-                                   @"Green", @"Blue", @"Purple"];
+    NSArray<NSString *> *names = [RBPrefs colorNames];
     NSArray<UIColor *> *colors = [RBPrefs colors];
     for (NSUInteger i = 0; i < names.count && i < colors.count; i++) {
         [sheet addAction:[UIAlertAction actionWithTitle:names[i]
@@ -198,25 +199,25 @@
             self->_drawView.lineColor = colors[i];
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self anchor:sheet to:_gear];
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)showWidths {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Line width"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"线条粗细"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSNumber *> *widths = [RBPrefs widths];
     for (NSUInteger i = 0; i < widths.count; i++) {
-        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%.0f pt", widths[i].doubleValue]
+        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%.0f 磅", widths[i].doubleValue]
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction *a) {
             [RBPrefs setWidthIndex:(NSInteger)i];
             self->_drawView.lineWidth = widths[i].doubleValue;
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self anchor:sheet to:_gear];
     [self presentViewController:sheet animated:YES completion:nil];
 }

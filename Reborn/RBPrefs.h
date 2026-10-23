@@ -16,7 +16,11 @@
 + (void)setWidthIndex:(NSInteger)index;
 
 + (NSArray<NSString *> *)toolNames;
++ (NSArray<NSString *> *)colorNames;
 + (NSArray<UIColor *> *)colors;
 + (NSArray<NSNumber *> *)widths;
+
++ (CGPoint)floatCenter;
++ (void)setFloatCenter:(CGPoint)center;
 
 @end

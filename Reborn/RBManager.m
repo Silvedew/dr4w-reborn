@@ -1,6 +1,7 @@
-﻿#import "RBManager.h"
+#import "RBManager.h"
 #import "RBWindow.h"
 #import "RBController.h"
+#import "RBFloating.h"
 
 #import <notify.h>
 #import <objc/runtime.h>
@@ -65,6 +66,8 @@ static NSTimeInterval gLastPress  = 0;
     [w makeKeyAndVisible];
     _window = w;
 
+    [[RBFloating shared] hide];
+
     NSLog(@"[Dr4wReborn] presented");
 }
 
@@ -77,6 +80,8 @@ static NSTimeInterval gLastPress  = 0;
 
     if (_previousKey) [_previousKey makeKeyWindow];
     _previousKey = nil;
+
+    [[RBFloating shared] show];
 
     NSLog(@"[Dr4wReborn] dismissed");
 }
@@ -98,7 +103,7 @@ static void RBHandleVolume(float v) {
     gLastVolume = v;
 
     NSTimeInterval now = [[NSDate date] timeIntervalSince1970] * 1000.0;
-    if (now - gLastPress > 650.0) gBuffer = @"";
+    if (now - gLastPress > 900.0) gBuffer = @"";
     gLastPress = now;
     gBuffer = [gBuffer stringByAppendingFormat:@"%c", c];
 
@@ -145,9 +150,11 @@ static void RBBootstrap(void) {
                                         NULL,
                                         CFNotificationSuspensionBehaviorDeliverImmediately);
 
-        [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
+        [NSTimer scheduledTimerWithTimeInterval:0.15 repeats:YES block:^(NSTimer *timer) {
             RBPollVolume();
         }];
+
+        [[RBFloating shared] show];
     });
 }
 

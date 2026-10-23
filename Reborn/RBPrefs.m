@@ -9,9 +9,9 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 }
 
 + (NSArray<NSString *> *)toolNames {
-    return @[@"Pen", @"Line", @"Arrow", @"Rectangle", @"Filled Rectangle",
-             @"Ellipse", @"Filled Ellipse", @"Eraser", @"Text",
-             @"Triangle", @"Pentagon", @"Hexagon"];
+    return @[@"钢笔", @"直线", @"箭头", @"矩形", @"实心矩形",
+             @"椭圆", @"实心椭圆", @"橡皮", @"文字",
+             @"三角形", @"五边形", @"六边形"];
 }
 
 + (NSArray<NSNumber *> *)toolTypes {
@@ -58,6 +58,10 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
              [UIColor systemPurpleColor]];
 }
 
++ (NSArray<NSString *> *)colorNames {
+    return @[@"黑色", @"白色", @"红色", @"橙色", @"黄色", @"绿色", @"蓝色", @"紫色"];
+}
+
 + (NSInteger)colorIndex {
     NSInteger i = [[self defaults] integerForKey:@"colorIndex"];
     if (i < 0 || i >= (NSInteger)[self colors].count) i = 0;
@@ -88,6 +92,24 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 
 + (void)setWidthIndex:(NSInteger)index {
     [[self defaults] setInteger:index forKey:@"widthIndex"];
+}
+
++ (CGPoint)floatCenter {
+    NSUserDefaults *d = [self defaults];
+    if (![d objectForKey:@"floatX"]) {
+        CGSize s = [UIScreen mainScreen].bounds.size;
+        return CGPointMake(s.width - 40.0, s.height * 0.35);
+    }
+    CGPoint p;
+    p.x = [d doubleForKey:@"floatX"];
+    p.y = [d doubleForKey:@"floatY"];
+    return p;
+}
+
++ (void)setFloatCenter:(CGPoint)center {
+    NSUserDefaults *d = [self defaults];
+    [d setDouble:center.x forKey:@"floatX"];
+    [d setDouble:center.y forKey:@"floatY"];
 }
 
 @end

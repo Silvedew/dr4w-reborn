@@ -17,30 +17,11 @@ jobs:
         run: |
           set -euxo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -O2 -IEngine -IReborn"
-
-          for ARCH in arm64 arm64e; do
-            TARGET="$ARCH-apple-ios15.0"
-            OUT="build-$ARCH"
-            rm -rf "$OUT"; mkdir -p "$OUT"
-
-            # vendored engine is MRC
-            for f in Engine/*.m; do
-              xcrun --sdk iphoneos clang -target "$TARGET" $COMMON -fno-objc-arc -c "$f" \
-                -o "$OUT/eng-$(basename "$f" .m).o"
-            done
-
-            # our code is ARC
-            for f in Reborn/*.m; do
-              xcrun --sdk iphoneos clang -target "$TARGET" $COMMON -fobjc-arc -c "$f" \
-                -o "$OUT/rb-$(basename "$f" .m).o"
-            done
-
-            xcrun --sdk iphoneos clang -target "$TARGET" -isysroot "$SDK" -dynamiclib "$OUT"/*.o \
-              -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore \
-              -o "Dr4wReborn-$ARCH.dylib"
-          done
-
+          SRCS=$(find Engine Reborn -name '*.m')
+          echo "$SRCS"
+          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IEngine -IReborn -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0  $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64.dylib
+          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64e.dylib
           lipo -create Dr4wReborn-arm64.dylib Dr4wReborn-arm64e.dylib -output Dr4wReborn.dylib
           lipo -info Dr4wReborn.dylib
 

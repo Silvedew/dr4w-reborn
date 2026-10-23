@@ -4,6 +4,13 @@
 
 #import <QuartzCore/QuartzCore.h>
 
+@interface RBFloating ()
+- (CGRect)clamped:(CGRect)f;
+- (CGFloat)size;
+- (UIImage *)icon;
+- (BOOL)disabledHere;
+@end
+
 @implementation RBFloating {
     UIWindow *_win;
     UIView   *_ball;
@@ -40,9 +47,9 @@
     CGFloat size = [self size];
 
     CGPoint c = [RBPrefs floatCenter];
-    _win = [[UIWindow alloc] initWithFrame:CGRectMake(c.x - size / 2.0,
-                                                      c.y - size / 2.0,
-                                                      size, size)];
+    _win = [[UIWindow alloc] initWithFrame:[self clamped:CGRectMake(c.x - size / 2.0,
+                                                                    c.y - size / 2.0,
+                                                                    size, size)]];
     _win.windowScene = [self activeScene];
     _win.windowLevel = UIWindowLevelAlert + 900.0;
     _win.backgroundColor = [UIColor clearColor];
@@ -120,12 +127,25 @@
     else [self show];
 }
 
+- (CGRect)clamped:(CGRect)f {
+    CGRect host = RBHostBounds();
+    if (host.size.width < f.size.width + 16) host.size.width = f.size.width + 16;
+    if (host.size.height < f.size.height + 16) host.size.height = f.size.height + 16;
+    if (f.origin.x < 8.0) f.origin.x = 8.0;
+    if (f.origin.y < 8.0) f.origin.y = 8.0;
+    if (f.origin.x > host.size.width - f.size.width - 8.0)
+        f.origin.x = host.size.width - f.size.width - 8.0;
+    if (f.origin.y > host.size.height - f.size.height - 8.0)
+        f.origin.y = host.size.height - f.size.height - 8.0;
+    return f;
+}
+
 - (void)applyPrefs {
     if (!_win) return;
     CGFloat size = [self size];
     CGRect f = _win.frame;
     f.size = CGSizeMake(size, size);
-    _win.frame = f;
+    _win.frame = [self clamped:f];
 
     _ball.frame = CGRectMake(0, 0, size, size);
     _ball.layer.cornerRadius = size / 2.0;
@@ -172,18 +192,18 @@
     f.origin.x += t.x;
     f.origin.y += t.y;
 
-    CGRect screen = [UIScreen mainScreen].bounds;
+    CGRect host = RBHostBounds();
     if (f.origin.x < 8.0) f.origin.x = 8.0;
     if (f.origin.y < 8.0) f.origin.y = 8.0;
-    if (f.origin.x > screen.size.width - size - 8.0) f.origin.x = screen.size.width - size - 8.0;
-    if (f.origin.y > screen.size.height - size - 8.0) f.origin.y = screen.size.height - size - 8.0;
+    if (f.origin.x > host.size.width - size - 8.0) f.origin.x = host.size.width - size - 8.0;
+    if (f.origin.y > host.size.height - size - 8.0) f.origin.y = host.size.height - size - 8.0;
 
     if (g.state == UIGestureRecognizerStateEnded ||
         g.state == UIGestureRecognizerStateCancelled) {
         /* snap flush to a side and dim, like a screen-edge tab */
         if (f.origin.x <= 24.0) { f.origin.x = 0.0; _snapped = YES; }
-        else if (f.origin.x >= screen.size.width - size - 24.0) {
-            f.origin.x = screen.size.width - size;
+        else if (f.origin.x >= host.size.width - size - 24.0) {
+            f.origin.x = host.size.width - size;
             _snapped = YES;
         } else {
             _snapped = NO;

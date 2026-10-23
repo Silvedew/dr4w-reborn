@@ -7,6 +7,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <math.h>
+#import <dlfcn.h>
 
 #pragma mark - volume source
 
@@ -38,6 +39,22 @@ CGRect RBHostBounds(void) {
             return ((UIWindowScene *)s).coordinateSpace.bounds;
     }
     return [UIScreen mainScreen].bounds;
+}
+
+/* YES when this process is the frontmost app. Uses the private SpringBoard
+   query, called from a background queue only (never from SpringBoard itself). */
+BOOL RBFrontmostIsSelf(void) {
+    static NSString *(*frontmost)(void) = NULL;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        void *h = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
+                         RTLD_LAZY);
+        if (h) frontmost = (NSString *(*)(void))dlsym(h, "SBFrontmostApplicationDisplayIdentifier");
+    });
+    if (!frontmost) return YES;          /* fail open */
+    NSString *bid = frontmost();
+    if (!bid) return YES;
+    return [bid isEqualToString:[[NSBundle mainBundle] bundleIdentifier]];
 }
 
 @interface RBManager ()
@@ -248,6 +265,24 @@ static void RBBootstrap(void) {
                     usingBlock:^(NSNotification *note) {
             [[RBFloating shared] hide];
         }];
+
+        /* split view has no focus flag in UIKit: ask SpringBoard from a
+           background queue so a slow IPC can never stall the UI thread */
+        static dispatch_source_t frontTimer = nil;
+        dispatch_queue_t q = dispatch_queue_create("com.dsh.dr4wreborn.front", DISPATCH_QUEUE_SERIAL);
+        frontTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
+        dispatch_source_set_timer(frontTimer,
+                                  dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                                  (uint64_t)(2.0 * NSEC_PER_SEC),
+                                  (uint64_t)(0.5 * NSEC_PER_SEC));
+        dispatch_source_set_event_handler(frontTimer, ^{
+            BOOL self = RBFrontmostIsSelf();
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[RBFloating shared] setFrontmost:self];
+            });
+        });
+        dispatch_resume(frontTimer);
+
         [[RBFloating shared] refreshVisibility];
     });
 }

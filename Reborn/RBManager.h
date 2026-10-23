@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 
 BOOL RBIsSpringBoard(void);
+CGRect RBHostBounds(void);
 
 @interface RBManager : NSObject
 
@@ -10,5 +11,6 @@ BOOL RBIsSpringBoard(void);
 - (void)toggle;
 - (void)present;
 - (void)dismiss;
+- (void)layoutForCurrentHost;
 
 @end

@@ -27,4 +27,14 @@
 + (CGPoint)floatCenter;
 + (void)setFloatCenter:(CGPoint)center;
 
+/* floating ball */
++ (CGFloat)ballSize;                 /* 44 / 56 / 64 */
++ (void)setBallSize:(CGFloat)size;
++ (CGFloat)ballAlpha;                /* 0.6 / 0.8 / 1.0 */
++ (void)setBallAlpha:(CGFloat)alpha;
+
+/* per-app switch */
++ (BOOL)isAppDisabled:(NSString *)bundleID;
++ (void)setAppDisabled:(NSString *)bundleID disabled:(BOOL)disabled;
+
 @end

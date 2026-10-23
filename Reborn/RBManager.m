@@ -19,6 +19,23 @@ static float          gLastVolume = -1.0f;
 static NSString      *gBuffer     = @"";
 static NSTimeInterval gLastPress  = 0;
 
+void RBWriteLog(NSString *text) {
+    NSString *path = @"/var/mobile/Media/Dr4wReborn/diag.txt";
+    [[NSFileManager defaultManager] createDirectoryAtPath:@"/var/mobile/Media/Dr4wReborn"
+                              withIntermediateDirectories:YES attributes:nil error:NULL];
+    NSDateFormatter *df = [[NSDateFormatter alloc] init];
+    df.dateFormat = @"HH:mm:ss.SSS";
+    NSString *line = [NSString stringWithFormat:@"[%@] %@", [df stringFromDate:[NSDate date]], text];
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:path];
+    if (!fh) {
+        [line writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+        return;
+    }
+    [fh seekToEndOfFile];
+    [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+    [fh closeFile];
+}
+
 @interface RBManager ()
 - (void)toggle;
 @end
@@ -57,9 +74,10 @@ static NSTimeInterval gLastPress  = 0;
 
     _previousKey = [UIApplication sharedApplication].keyWindow;
 
+    UIWindowScene *scene = [self activeScene];
     RBWindow *w = [[RBWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-    w.windowScene = [self activeScene];
-    w.windowLevel = UIWindowLevelAlert + 10.0;
+    w.windowScene = scene;
+    w.windowLevel = UIWindowLevelAlert + 1000.0;
     w.backgroundColor = [UIColor clearColor];
     w.rootViewController = [[RBController alloc] init];
     w.hidden = NO;
@@ -68,7 +86,25 @@ static NSTimeInterval gLastPress  = 0;
 
     [[RBFloating shared] hide];
 
-    NSLog(@"[Dr4wReborn] presented");
+    NSMutableString *diag = [NSMutableString string];
+    [diag appendFormat:@"present scene=%@ state=%ld screen=%@ window=%@ level=%.0f key=%d\n",
+        scene, (long)scene.activationState,
+        NSStringFromCGRect([UIScreen mainScreen].bounds),
+        NSStringFromCGRect(w.frame), (double)w.windowLevel, (int)w.isKeyWindow];
+    for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+        [diag appendFormat:@"  scene %@ state=%ld\n", s, (long)s.activationState];
+    }
+    RBWriteLog(diag);
+
+    /* keep it on top when an app comes to the foreground */
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (!self->_window) return;
+        [self->_window makeKeyWindow];
+        [self->_window setHidden:NO];
+        RBWriteLog([NSString stringWithFormat:@"rekey window key=%d frame=%@\n",
+                    (int)self->_window.isKeyWindow, NSStringFromCGRect(self->_window.frame)]);
+    });
 }
 
 - (void)dismiss {

@@ -49,19 +49,13 @@ static CGFloat const kSize = 56.0;
     _win.rootViewController = vc;
 
     _ball = [[UIView alloc] initWithFrame:_win.bounds];
-    _ball.backgroundColor = [UIColor clearColor];
+    _ball.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.92];
+    _ball.layer.cornerRadius = kSize / 2.0;
+    _ball.layer.cornerCurve = kCACornerCurveContinuous;
+    _ball.layer.borderWidth = 0.5;
+    _ball.layer.borderColor = [UIColor colorWithWhite:0.0 alpha:0.12].CGColor;
+    _ball.clipsToBounds = YES;
     [_win.rootViewController.view addSubview:_ball];
-
-    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:
-                                 [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialLight]];
-    glass.frame = _ball.bounds;
-    glass.layer.cornerRadius = kSize / 2.0;
-    glass.layer.cornerCurve = kCACornerCurveContinuous;
-    glass.layer.borderWidth = 0.5;
-    glass.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.6].CGColor;
-    glass.clipsToBounds = YES;
-    glass.userInteractionEnabled = NO;
-    [_ball addSubview:glass];
 
     _btn = [UIButton buttonWithType:UIButtonTypeSystem];
     _btn.frame = _ball.bounds;

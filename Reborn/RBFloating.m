@@ -85,9 +85,13 @@ static CGFloat const kSize = 56.0;
 }
 
 - (void)show {
-    [self buildIfNeeded];
-    _userHidden = NO;
-    _win.hidden = NO;
+    @try {
+        [self buildIfNeeded];
+        _userHidden = NO;
+        _win.hidden = NO;
+    } @catch (NSException *e) {
+        NSLog(@"[Dr4wReborn] ball show failed: %@", e);
+    }
 }
 
 - (void)hide {

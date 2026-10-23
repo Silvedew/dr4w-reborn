@@ -110,24 +110,12 @@ void RBWriteLog(NSString *text) {
 
     [[RBFloating shared] hide];
 
-    NSMutableString *diag = [NSMutableString string];
-    [diag appendFormat:@"present scene=%@ state=%ld screen=%@ window=%@ level=%.0f key=%d\n",
-        scene, (long)scene.activationState,
-        NSStringFromCGRect([UIScreen mainScreen].bounds),
-        NSStringFromCGRect(w.frame), (double)w.windowLevel, (int)w.isKeyWindow];
-    for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
-        [diag appendFormat:@"  scene %@ state=%ld\n", s, (long)s.activationState];
-    }
-    RBWriteLog(diag);
-
     /* keep it on top when an app comes to the foreground */
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (!self->_window) return;
         [self->_window makeKeyWindow];
         [self->_window setHidden:NO];
-        RBWriteLog([NSString stringWithFormat:@"rekey window key=%d frame=%@\n",
-                    (int)self->_window.isKeyWindow, NSStringFromCGRect(self->_window.frame)]);
     });
 }
 
@@ -226,7 +214,10 @@ static void RBBootstrap(void) {
             /* authoritative check: hide the SpringBoard ball whenever any app
                is frontmost, otherwise it floats above that app as a dead twin */
             [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
+                static BOOL lastOther = NO;
                 BOOL other = RBOtherAppFrontmost();
+                if (other == lastOther) return;
+                lastOther = other;
                 if (other) {
                     [[RBFloating shared] hide];
                 } else if (![[RBManager shared] isShowing]) {

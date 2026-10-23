@@ -58,20 +58,6 @@
 
 #pragma mark - controller
 
-@interface RBLogDrawingView : ACEDrawingView
-@end
-
-@implementation RBLogDrawingView
-- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    UITouch *t = [touches anyObject];
-    CGPoint p = [t locationInView:self];
-    RBWriteLog([NSString stringWithFormat:@"touch %.0f,%.0f win=%@ key=%d enabled=%d frame=%@\n",
-                p.x, p.y, self.window, (int)self.window.isKeyWindow,
-                (int)self.userInteractionEnabled, NSStringFromCGRect(self.frame)]);
-    [super touchesBegan:touches withEvent:event];
-}
-@end
-
 @interface RBController () <UIColorPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate>
 @end
 
@@ -96,7 +82,7 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor clearColor];
 
-    _drawView = [[RBLogDrawingView alloc] initWithFrame:self.view.bounds];
+    _drawView = [[ACEDrawingView alloc] initWithFrame:self.view.bounds];
     _drawView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _drawView.backgroundColor = [UIColor clearColor];
     _drawView.clipsToBounds = YES;

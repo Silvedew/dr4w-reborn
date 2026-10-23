@@ -5,14 +5,66 @@
 #import "ACEDrawingView.h"
 #import <QuartzCore/QuartzCore.h>
 
+#pragma mark - quick colour palette (4 circles)
+
+@interface RBColorPaletteVC : UIViewController
+@property (nonatomic, strong) NSArray<UIColor *> *colors;
+@property (nonatomic, copy) void (^onPick)(UIColor *color);
+@end
+
+@implementation RBColorPaletteVC
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.98];
+
+    CGFloat size = 44.0;
+    CGFloat gap = 8.0;
+    CGFloat width = self.colors.count * size + (self.colors.count + 1) * gap;
+    self.preferredContentSize = CGSizeMake(width, size + gap * 2.0);
+
+    CGFloat x = gap;
+    for (NSUInteger i = 0; i < self.colors.count; i++) {
+        UIColor *c = self.colors[i];
+        UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
+        b.frame = CGRectMake(x, gap, size, size);
+        b.backgroundColor = c;
+        b.layer.cornerRadius = size / 2.0;
+        b.layer.borderWidth = 1.0;
+        b.layer.borderColor = [UIColor colorWithWhite:0.0 alpha:0.25].CGColor;
+        b.tag = (NSInteger)i;
+        [b addTarget:self action:@selector(pick:) forControlEvents:UIControlEventTouchUpInside];
+        [self.view addSubview:b];
+        x += size + gap;
+    }
+}
+
+- (void)pick:(UIButton *)sender {
+    UIColor *c = self.colors[(NSUInteger)sender.tag];
+    if (self.onPick) self.onPick(c);
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+@end
+
+#pragma mark - controller
+
+@interface RBController () <UIColorPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate>
+@end
+
 @implementation RBController {
     ACEDrawingView *_drawView;
     UIView         *_bar;
+
+    UIButton       *_color;
     UIButton       *_gear;
     UIButton       *_undo;
     UIButton       *_clear;
     UIButton       *_shot;
     UIButton       *_close;
+
+    RBColorPaletteVC *_palette;
+    UIColorPickerViewController *_picker;
 }
 
 #pragma mark - life cycle
@@ -53,7 +105,7 @@
 
 - (void)buildBar {
     CGFloat bw = 56.0;
-    CGFloat bh = 5.0 * 52.0 + 16.0;
+    CGFloat bh = 6.0 * 52.0 + 16.0;
     CGRect f;
     f.origin.x = self.view.bounds.size.width - bw - 8.0;
     f.origin.y = (self.view.bounds.size.height - bh) / 2.0;
@@ -69,18 +121,38 @@
                             UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:_bar];
 
+    _color = [self barButton:@"circle.fill" action:@selector(colorTapped:)];
     _gear  = [self barButton:@"gearshape" action:@selector(settingsTapped:)];
     _undo  = [self barButton:@"arrow.uturn.backward" action:@selector(undoTapped:)];
     _clear = [self barButton:@"trash" action:@selector(clearTapped:)];
     _shot  = [self barButton:@"camera" action:@selector(shotTapped:)];
     _close = [self barButton:@"xmark.circle.fill" action:@selector(closeTapped:)];
 
-    NSArray<UIButton *> *buttons = @[_gear, _undo, _clear, _shot, _close];
+    NSArray<UIButton *> *buttons = @[_color, _gear, _undo, _clear, _shot, _close];
     for (NSUInteger i = 0; i < buttons.count; i++) {
         UIButton *b = buttons[i];
         b.frame = CGRectMake(6.0, 8.0 + i * 52.0, 44.0, 44.0);
         [_bar addSubview:b];
     }
+
+    [self updateColorIcon];
+}
+
+- (void)updateColorIcon {
+    UIColor *c = [RBPrefs color];
+    CGSize s = CGSizeMake(28.0, 28.0);
+    UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:s];
+    UIImage *img = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        CGContextRef g = ctx.CGContext;
+        CGRect circle = CGRectMake(2.0, 2.0, 24.0, 24.0);
+        CGContextSetFillColorWithColor(g, c.CGColor);
+        CGContextFillEllipseInRect(g, circle);
+        CGContextSetStrokeColorWithColor(g, [UIColor colorWithWhite:0.0 alpha:0.35].CGColor);
+        CGContextSetLineWidth(g, 1.5);
+        CGContextStrokeEllipseInRect(g, circle);
+    }];
+    [_color setImage:[img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]
+            forState:UIControlStateNormal];
 }
 
 #pragma mark - actions
@@ -126,6 +198,89 @@
     [self presentViewController:a animated:YES completion:nil];
 }
 
+#pragma mark - colour
+
+- (void)colorTapped:(UIButton *)sender {
+    /* palette open -> switch to the full wheel */
+    if (_palette) {
+        RBColorPaletteVC *p = _palette;
+        _palette = nil;
+        [p dismissViewControllerAnimated:NO completion:^{
+            [self showColorWheel];
+        }];
+        return;
+    }
+    if (_picker) {
+        [_picker dismissViewControllerAnimated:YES completion:nil];
+        _picker = nil;
+        return;
+    }
+    [self showPalette];
+}
+
+- (void)showPalette {
+    RBColorPaletteVC *vc = [[RBColorPaletteVC alloc] init];
+    vc.colors = @[[UIColor colorWithWhite:0.05 alpha:1.0],
+                  [UIColor systemRedColor],
+                  [UIColor systemBlueColor],
+                  [UIColor systemGreenColor]];
+    __weak typeof(self) weakSelf = self;
+    vc.onPick = ^(UIColor *color) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf applyColor:color];
+        strongSelf->_palette = nil;
+    };
+    vc.modalPresentationStyle = UIModalPresentationPopover;
+    UIPopoverPresentationController *pop = vc.popoverPresentationController;
+    pop.sourceView = _color;
+    pop.sourceRect = _color.bounds;
+    pop.permittedArrowDirections = UIPopoverArrowDirectionLeft | UIPopoverArrowDirectionRight;
+    pop.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.98];
+
+    _palette = vc;
+    [self presentViewController:vc animated:YES completion:^{
+        vc.presentationController.delegate = self;
+    }];
+}
+
+- (void)showColorWheel {
+    UIColorPickerViewController *p = [[UIColorPickerViewController alloc] init];
+    p.selectedColor = [RBPrefs color];
+    p.supportsAlpha = NO;
+    p.delegate = self;
+    p.modalPresentationStyle = UIModalPresentationPopover;
+    p.preferredContentSize = CGSizeMake(320.0, 420.0);
+    UIPopoverPresentationController *pop = p.popoverPresentationController;
+    pop.sourceView = _color;
+    pop.sourceRect = _color.bounds;
+    pop.permittedArrowDirections = UIPopoverArrowDirectionLeft | UIPopoverArrowDirectionRight;
+
+    _picker = p;
+    [self presentViewController:p animated:YES completion:^{
+        p.presentationController.delegate = self;
+    }];
+}
+
+- (void)applyColor:(UIColor *)color {
+    [RBPrefs setCustomColor:color];
+    _drawView.lineColor = color;
+    [self updateColorIcon];
+}
+
+- (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)viewController {
+    [self applyColor:viewController.selectedColor];
+}
+
+- (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)viewController {
+    _picker = nil;
+}
+
+- (void)presentationControllerDidDismiss:(UIPresentationController *)presentationController {
+    if (presentationController.presentedViewController == _palette) _palette = nil;
+    if (presentationController.presentedViewController == _picker) _picker = nil;
+}
+
 #pragma mark - settings
 
 - (void)anchor:(UIAlertController *)sheet to:(UIView *)view {
@@ -147,7 +302,7 @@
                                             handler:^(UIAlertAction *a) { [self showTools]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"线条颜色"
                                               style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self showColors]; }]];
+                                            handler:^(UIAlertAction *a) { [self colorTapped:nil]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"线条粗细"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showWidths]; }]];
@@ -178,25 +333,6 @@
                                                 handler:^(UIAlertAction *a) {
             [RBPrefs setTool:t];
             self->_drawView.drawTool = t;
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [self anchor:sheet to:_gear];
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
-- (void)showColors {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"线条颜色"
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray<NSString *> *names = [RBPrefs colorNames];
-    NSArray<UIColor *> *colors = [RBPrefs colors];
-    for (NSUInteger i = 0; i < names.count && i < colors.count; i++) {
-        [sheet addAction:[UIAlertAction actionWithTitle:names[i]
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *a) {
-            [RBPrefs setColorIndex:(NSInteger)i];
-            self->_drawView.lineColor = colors[i];
         }]];
     }
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];

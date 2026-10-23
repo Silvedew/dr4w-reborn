@@ -69,11 +69,36 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 }
 
 + (UIColor *)color {
+    if ([self hasCustomColor]) return [self customColor];
     return [self colors][[self colorIndex]];
 }
 
 + (void)setColorIndex:(NSInteger)index {
+    [[self defaults] setBool:NO forKey:@"hasCustom"];
     [[self defaults] setInteger:index forKey:@"colorIndex"];
+}
+
++ (BOOL)hasCustomColor {
+    return [[self defaults] boolForKey:@"hasCustom"];
+}
+
++ (UIColor *)customColor {
+    NSUserDefaults *d = [self defaults];
+    return [UIColor colorWithRed:[d doubleForKey:@"cR"]
+                           green:[d doubleForKey:@"cG"]
+                            blue:[d doubleForKey:@"cB"]
+                           alpha:[d doubleForKey:@"cA"]];
+}
+
++ (void)setCustomColor:(UIColor *)color {
+    CGFloat r = 0, g = 0, b = 0, a = 1;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    NSUserDefaults *d = [self defaults];
+    [d setDouble:r forKey:@"cR"];
+    [d setDouble:g forKey:@"cG"];
+    [d setDouble:b forKey:@"cB"];
+    [d setDouble:a forKey:@"cA"];
+    [d setBool:YES forKey:@"hasCustom"];
 }
 
 + (NSArray<NSNumber *> *)widths {

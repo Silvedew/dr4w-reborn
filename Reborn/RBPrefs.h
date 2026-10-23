@@ -11,6 +11,10 @@
 + (UIColor *)color;
 + (void)setColorIndex:(NSInteger)index;
 
++ (BOOL)hasCustomColor;
++ (UIColor *)customColor;
++ (void)setCustomColor:(UIColor *)color;
+
 + (NSInteger)widthIndex;
 + (CGFloat)lineWidth;
 + (void)setWidthIndex:(NSInteger)index;

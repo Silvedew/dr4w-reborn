@@ -128,7 +128,8 @@
     _shot  = [self barButton:@"camera" action:@selector(shotTapped:)];
     _close = [self barButton:@"xmark.circle.fill" action:@selector(closeTapped:)];
 
-    NSArray<UIButton *> *buttons = @[_color, _gear, _undo, _clear, _shot, _close];
+    /* 1 设置 / 2 截图 / 3 返回(撤销) / 4 清屏 / 5 颜色 / 6 关闭 */
+    NSArray<UIButton *> *buttons = @[_gear, _shot, _undo, _clear, _color, _close];
     for (NSUInteger i = 0; i < buttons.count; i++) {
         UIButton *b = buttons[i];
         b.frame = CGRectMake(6.0, 8.0 + i * 52.0, 44.0, 44.0);

@@ -186,32 +186,59 @@ static void RBBootstrap(void) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        /* the ball lives in every process (SpringBoard + every app) */
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification *note) {
+        NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+
+        if (RBIsSpringBoard()) {
+            /* SpringBoard: keep the ball, plus the volume trigger */
+            [nc addObserverForName:UIApplicationDidBecomeActiveNotification
+                            object:nil
+                             queue:[NSOperationQueue mainQueue]
+                        usingBlock:^(NSNotification *note) {
+                if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
+            }];
+            [[RBFloating shared] show];
+
+            int tOn = 0, tOff = 0;
+            notify_register_dispatch("com.dsh.dr4wreborn.appon", &tOn, dispatch_get_main_queue(), ^(int t) {
+                [[RBFloating shared] hide];
+            });
+            notify_register_dispatch("com.dsh.dr4wreborn.appoff", &tOff, dispatch_get_main_queue(), ^(int t) {
+                if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
+            });
+
+            int token = 0;
+            notify_register_dispatch("com.dsh.dr4wreborn.toggle", &token, dispatch_get_main_queue(), ^(int t) {
+                [[RBManager shared] toggle];
+            });
+
+            CFNotificationCenterAddObserver(CFNotificationCenterGetLocalCenter(), NULL,
+                                            RBVolumeNote,
+                                            CFSTR("AVSystemController_SystemVolumeDidChangeNotification"),
+                                            NULL,
+                                            CFNotificationSuspensionBehaviorDeliverImmediately);
+
+            [NSTimer scheduledTimerWithTimeInterval:0.15 repeats:YES block:^(NSTimer *timer) {
+                RBPollVolume();
+            }];
+            return;
+        }
+
+        /* every app: its own ball, and tell SpringBoard to hide its one */
+        [nc addObserverForName:UIApplicationDidBecomeActiveNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+            notify_post("com.dsh.dr4wreborn.appon");
             if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
         }];
-        [[RBFloating shared] show];
-
-        /* the volume trigger only runs in SpringBoard to avoid double toggles */
-        if (!RBIsSpringBoard()) return;
-
-        int token = 0;
-        notify_register_dispatch("com.dsh.dr4wreborn.toggle", &token, dispatch_get_main_queue(), ^(int t) {
-            [[RBManager shared] toggle];
-        });
-
-        CFNotificationCenterAddObserver(CFNotificationCenterGetLocalCenter(), NULL,
-                                        RBVolumeNote,
-                                        CFSTR("AVSystemController_SystemVolumeDidChangeNotification"),
-                                        NULL,
-                                        CFNotificationSuspensionBehaviorDeliverImmediately);
-
-        [NSTimer scheduledTimerWithTimeInterval:0.15 repeats:YES block:^(NSTimer *timer) {
-            RBPollVolume();
+        [nc addObserverForName:UIApplicationDidEnterBackgroundNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+            notify_post("com.dsh.dr4wreborn.appoff");
+            [[RBFloating shared] hide];
         }];
+        [[RBFloating shared] show];
     });
 }
 

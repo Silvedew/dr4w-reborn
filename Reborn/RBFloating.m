@@ -85,6 +85,12 @@ static CGFloat const kSize = 56.0;
 }
 
 - (void)show {
+    /* SpringBoard never owns a ball: it would float above apps as a dead twin.
+       On the home screen the volume shortcut is the entry point. */
+    if (RBIsSpringBoard()) {
+        _win.hidden = YES;
+        return;
+    }
     @try {
         [self buildIfNeeded];
         _userHidden = NO;

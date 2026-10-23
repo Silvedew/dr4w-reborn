@@ -72,7 +72,6 @@
     UIButton       *_gear;
     UIButton       *_undo;
     UIButton       *_clear;
-    UIButton       *_shot;
     UIButton       *_close;
 
     RBColorPaletteVC *_palette;
@@ -117,7 +116,7 @@
 
 - (void)buildBar {
     CGFloat bw = 56.0;
-    CGFloat bh = 6.0 * 52.0 + 16.0;
+    CGFloat bh = 5.0 * 52.0 + 16.0;
     CGRect f;
     f.origin.x = self.view.bounds.size.width - bw - 8.0;
     f.origin.y = (self.view.bounds.size.height - bh) / 2.0;
@@ -142,11 +141,10 @@
     _gear  = [self barButton:@"gearshape" action:@selector(settingsTapped:)];
     _undo  = [self barButton:@"arrow.uturn.backward" action:@selector(undoTapped:)];
     _clear = [self barButton:@"trash" action:@selector(clearTapped:)];
-    _shot  = [self barButton:@"camera" action:@selector(shotTapped:)];
     _close = [self barButton:@"xmark.circle.fill" action:@selector(closeTapped:)];
 
     /* 1 设置 / 2 截图 / 3 返回(撤销) / 4 清屏 / 5 颜色 / 6 关闭 */
-    NSArray<UIButton *> *buttons = @[_gear, _shot, _undo, _clear, _color, _close];
+    NSArray<UIButton *> *buttons = @[_gear, _undo, _clear, _color, _close];
     UIView *content = ((UIVisualEffectView *)_bar).contentView;
     for (NSUInteger i = 0; i < buttons.count; i++) {
         UIButton *b = buttons[i];
@@ -186,111 +184,6 @@
 
 - (void)closeTapped:(UIButton *)sender {
     [[RBManager shared] dismiss];
-}
-
-- (void)shotTapped:(UIButton *)sender {
-    UIImage *drawing = _drawView.image;
-    CGSize size = _drawView.bounds.size;
-
-    UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:size];
-    UIImage *flat = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
-        [[UIColor whiteColor] setFill];
-        UIRectFill(CGRectMake(0, 0, size.width, size.height));
-        if (drawing) [drawing drawInRect:CGRectMake(0, 0, size.width, size.height)];
-    }];
-
-    [self saveToAlbum:flat];
-}
-
-/* Saves through Photos.framework looked up at runtime (no link dependency).
-   Apps whose Info.plist lacks NSPhotoLibraryAddUsageDescription would crash
-   inside TCC, so those fall back to a file. */
-- (void)saveToAlbum:(UIImage *)image {
-    NSString *usage = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSPhotoLibraryAddUsageDescription"];
-    Class libClass = NSClassFromString(@"PHPhotoLibrary");
-    Class reqClass = NSClassFromString(@"PHAssetChangeRequest");
-
-    if (!usage || !libClass || !reqClass) {
-        [self saveToFile:image];
-        [self toast:@"该 App 未开放相册，已存文件"];
-        return;
-    }
-
-    id library = ((id (*)(id, SEL))objc_msgSend)((id)libClass,
-                                                 sel_registerName("sharedPhotoLibrary"));
-    if (!library) {
-        [self saveToFile:image];
-        [self toast:@"保存失败，已存文件"];
-        return;
-    }
-
-    void (^changes)(void) = ^{
-        ((id (*)(id, SEL, id))objc_msgSend)((id)reqClass,
-                                           sel_registerName("creationRequestForAssetFromImage:"),
-                                           image);
-    };
-    __weak typeof(self) weakSelf = self;
-    void (^completion)(BOOL, NSError *) = ^(BOOL success, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) s = weakSelf;
-            if (!s) return;
-            if (success) {
-                [s toast:@"已保存到相册"];
-            } else {
-                [s saveToFile:image];
-                [s toast:@"相册未授权，已存文件"];
-            }
-        });
-    };
-    ((void (*)(id, SEL, id, id))objc_msgSend)(library,
-                                             sel_registerName("performChanges:completionHandler:"),
-                                             changes, completion);
-}
-
-- (void)saveToFile:(UIImage *)image {
-    NSData *png = UIImagePNGRepresentation(image);
-    NSString *dir = RBIsSpringBoard()
-        ? @"/var/mobile/Media/Dr4wReborn"
-        : [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
-           stringByAppendingPathComponent:@"Dr4wReborn"];
-    [[NSFileManager defaultManager] createDirectoryAtPath:dir
-                             withIntermediateDirectories:YES
-                                              attributes:nil
-                                                   error:NULL];
-    NSString *path = [dir stringByAppendingPathComponent:
-                      [NSString stringWithFormat:@"shot-%.0f.png",
-                       [[NSDate date] timeIntervalSince1970]]];
-    [png writeToFile:path atomically:YES];
-}
-
-- (void)toast:(NSString *)text {
-    UILabel *label = [[UILabel alloc] init];
-    label.text = text;
-    label.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
-    label.textColor = [UIColor whiteColor];
-    label.textAlignment = NSTextAlignmentCenter;
-    label.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.78];
-    label.layer.cornerRadius = 16.0;
-    label.layer.cornerCurve = kCACornerCurveContinuous;
-    label.clipsToBounds = YES;
-
-    CGSize fit = [label sizeThatFits:CGSizeMake(360.0, 44.0)];
-    CGFloat w = fit.width + 36.0;
-    CGFloat h = 38.0;
-    label.frame = CGRectMake((self.view.bounds.size.width - w) / 2.0,
-                             self.view.bounds.size.height - 100.0, w, h);
-    label.alpha = 0.0;
-    [self.view addSubview:label];
-
-    [UIView animateWithDuration:0.18 animations:^{
-        label.alpha = 1.0;
-    } completion:^(BOOL finished) {
-        [UIView animateWithDuration:0.3 delay:1.2 options:0 animations:^{
-            label.alpha = 0.0;
-        } completion:^(BOOL done) {
-            [label removeFromSuperview];
-        }];
-    }];
 }
 
 #pragma mark - colour

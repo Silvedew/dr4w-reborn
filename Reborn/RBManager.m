@@ -19,10 +19,18 @@ static float          gLastVolume = -1.0f;
 static NSString      *gBuffer     = @"";
 static NSTimeInterval gLastPress  = 0;
 
+BOOL RBIsSpringBoard(void) {
+    return [[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"];
+}
+
 void RBWriteLog(NSString *text) {
-    NSString *path = @"/var/mobile/Media/Dr4wReborn/diag.txt";
-    [[NSFileManager defaultManager] createDirectoryAtPath:@"/var/mobile/Media/Dr4wReborn"
-                              withIntermediateDirectories:YES attributes:nil error:NULL];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *dir = RBIsSpringBoard()
+        ? @"/var/mobile/Media/Dr4wReborn"
+        : [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
+           stringByAppendingPathComponent:@"Dr4wReborn"];
+    [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:NULL];
+    NSString *path = [dir stringByAppendingPathComponent:@"diag.txt"];
     NSDateFormatter *df = [[NSDateFormatter alloc] init];
     df.dateFormat = @"HH:mm:ss.SSS";
     NSString *line = [NSString stringWithFormat:@"[%@] %@", [df stringFromDate:[NSDate date]], text];
@@ -171,10 +179,25 @@ static void RBVolumeNote(CFNotificationCenterRef center, void *observer,
 
 __attribute__((constructor))
 static void RBBootstrap(void) {
-    NSLog(@"[Dr4wReborn] loaded pid %d", getpid());
+    NSLog(@"[Dr4wReborn] loaded pid %d (%@)", getpid(),
+          [[NSBundle mainBundle] bundleIdentifier]);
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+    if (!NSClassFromString(@"UIApplication")) return;
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
+        /* the ball lives in every process (SpringBoard + every app) */
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification *note) {
+            if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
+        }];
+        [[RBFloating shared] show];
+
+        /* the volume trigger only runs in SpringBoard to avoid double toggles */
+        if (!RBIsSpringBoard()) return;
+
         int token = 0;
         notify_register_dispatch("com.dsh.dr4wreborn.toggle", &token, dispatch_get_main_queue(), ^(int t) {
             [[RBManager shared] toggle];
@@ -189,8 +212,6 @@ static void RBBootstrap(void) {
         [NSTimer scheduledTimerWithTimeInterval:0.15 repeats:YES block:^(NSTimer *timer) {
             RBPollVolume();
         }];
-
-        [[RBFloating shared] show];
     });
 }
 

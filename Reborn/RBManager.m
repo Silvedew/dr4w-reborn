@@ -7,7 +7,6 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <math.h>
-#import <dlfcn.h>
 
 #pragma mark - volume source
 
@@ -19,45 +18,11 @@
 static float          gLastVolume = -1.0f;
 static NSString      *gBuffer     = @"";
 static NSTimeInterval gLastPress  = 0;
+static NSTimer       *gFastTimer  = nil;
+static NSInteger      gFastGen    = 0;
 
 BOOL RBIsSpringBoard(void) {
     return [[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"];
-}
-
-/* YES when something other than SpringBoard is frontmost (an app is on screen) */
-static BOOL RBOtherAppFrontmost(void) {
-    static NSString *(*frontmost)(void) = NULL;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        void *h = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
-                         RTLD_LAZY);
-        if (h) frontmost = (NSString *(*)(void))dlsym(h, "SBFrontmostApplicationDisplayIdentifier");
-    });
-    if (!frontmost) return NO;
-    NSString *bid = frontmost();
-    if (!bid) return NO;
-    return ![bid isEqualToString:@"com.apple.springboard"];
-}
-
-void RBWriteLog(NSString *text) {
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSString *dir = RBIsSpringBoard()
-        ? @"/var/mobile/Media/Dr4wReborn"
-        : [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
-           stringByAppendingPathComponent:@"Dr4wReborn"];
-    [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:NULL];
-    NSString *path = [dir stringByAppendingPathComponent:@"diag.txt"];
-    NSDateFormatter *df = [[NSDateFormatter alloc] init];
-    df.dateFormat = @"HH:mm:ss.SSS";
-    NSString *line = [NSString stringWithFormat:@"[%@] %@", [df stringFromDate:[NSDate date]], text];
-    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:path];
-    if (!fh) {
-        [line writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:NULL];
-        return;
-    }
-    [fh seekToEndOfFile];
-    [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
-    [fh closeFile];
 }
 
 @interface RBManager ()
@@ -98,9 +63,8 @@ void RBWriteLog(NSString *text) {
 
     _previousKey = [UIApplication sharedApplication].keyWindow;
 
-    UIWindowScene *scene = [self activeScene];
     RBWindow *w = [[RBWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-    w.windowScene = scene;
+    w.windowScene = [self activeScene];
     w.windowLevel = UIWindowLevelAlert + 1000.0;
     w.backgroundColor = [UIColor clearColor];
     w.rootViewController = [[RBController alloc] init];
@@ -110,7 +74,6 @@ void RBWriteLog(NSString *text) {
 
     [[RBFloating shared] hide];
 
-    /* keep it on top when an app comes to the foreground */
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (!self->_window) return;
@@ -129,9 +92,7 @@ void RBWriteLog(NSString *text) {
     if (_previousKey) [_previousKey makeKeyWindow];
     _previousKey = nil;
 
-    [[RBFloating shared] show];
-
-    NSLog(@"[Dr4wReborn] dismissed");
+    [[RBFloating shared] refreshVisibility];
 }
 
 - (void)toggle {
@@ -142,6 +103,23 @@ void RBWriteLog(NSString *text) {
 @end
 
 #pragma mark - volume trigger
+
+static void RBPollVolume(void);
+
+static void RBStartFastPolling(void) {
+    gFastGen++;
+    NSInteger gen = gFastGen;
+    if (gFastTimer) [gFastTimer invalidate];
+    gFastTimer = [NSTimer scheduledTimerWithTimeInterval:0.12 repeats:YES block:^(NSTimer *timer) {
+        RBPollVolume();
+    }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (gen != gFastGen) return;
+        [gFastTimer invalidate];
+        gFastTimer = nil;
+    });
+}
 
 static void RBHandleVolume(float v) {
     if (gLastVolume < 0) { gLastVolume = v; return; }
@@ -154,6 +132,9 @@ static void RBHandleVolume(float v) {
     if (now - gLastPress > 900.0) gBuffer = @"";
     gLastPress = now;
     gBuffer = [gBuffer stringByAppendingFormat:@"%c", c];
+
+    /* a key was pressed: poll quickly for a moment to catch the partner key */
+    RBStartFastPolling();
 
     if ([gBuffer containsString:@"UD"]) {
         gBuffer = @"";
@@ -181,19 +162,16 @@ static void RBVolumeNote(CFNotificationCenterRef center, void *observer,
     if (n) RBHandleVolume(n.floatValue);
 }
 
+#pragma mark - startup
+
 __attribute__((constructor))
 static void RBBootstrap(void) {
-    NSLog(@"[Dr4wReborn] loaded pid %d (%@)", getpid(),
-          [[NSBundle mainBundle] bundleIdentifier]);
-
     if (!NSClassFromString(@"UIApplication")) return;
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
-
         if (RBIsSpringBoard()) {
-            /* SpringBoard: volume trigger only, no ball (apps own the ball) */
+            /* SpringBoard: volume trigger only, no ball */
             int token = 0;
             notify_register_dispatch("com.dsh.dr4wreborn.toggle", &token, dispatch_get_main_queue(), ^(int t) {
                 [[RBManager shared] toggle];
@@ -205,18 +183,20 @@ static void RBBootstrap(void) {
                                             NULL,
                                             CFNotificationSuspensionBehaviorDeliverImmediately);
 
-            [NSTimer scheduledTimerWithTimeInterval:0.15 repeats:YES block:^(NSTimer *timer) {
+            /* slow idle poll; speeds up for 8 s after every key press */
+            [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
                 RBPollVolume();
             }];
             return;
         }
 
         /* every app: its own ball */
+        NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
         [nc addObserverForName:UIApplicationDidBecomeActiveNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
-            if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
+            [[RBFloating shared] refreshVisibility];
         }];
         [nc addObserverForName:UIApplicationDidEnterBackgroundNotification
                         object:nil
@@ -224,7 +204,6 @@ static void RBBootstrap(void) {
                     usingBlock:^(NSNotification *note) {
             [[RBFloating shared] hide];
         }];
-        [[RBFloating shared] show];
+        [[RBFloating shared] refreshVisibility];
     });
 }
-

@@ -16,7 +16,16 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.98];
+    self.view.backgroundColor = [UIColor clearColor];
+
+    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:
+                                 [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialLight]];
+    glass.frame = self.view.bounds;
+    glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    glass.layer.cornerRadius = 16.0;
+    glass.layer.cornerCurve = kCACornerCurveContinuous;
+    glass.clipsToBounds = YES;
+    [self.view addSubview:glass];
 
     CGFloat size = 44.0;
     CGFloat gap = 8.0;
@@ -112,9 +121,14 @@
     f.size.width = bw;
     f.size.height = bh;
 
-    _bar = [[UIView alloc] initWithFrame:f];
-    _bar.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.86];
+    _bar = [[UIVisualEffectView alloc] initWithEffect:
+            [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialLight]];
+    _bar.frame = f;
+    _bar.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
     _bar.layer.cornerRadius = 18.0;
+    _bar.layer.cornerCurve = kCACornerCurveContinuous;
+    _bar.layer.borderWidth = 0.5;
+    _bar.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.55].CGColor;
     _bar.clipsToBounds = YES;
     _bar.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
                             UIViewAutoresizingFlexibleTopMargin |
@@ -128,12 +142,13 @@
     _shot  = [self barButton:@"camera" action:@selector(shotTapped:)];
     _close = [self barButton:@"xmark.circle.fill" action:@selector(closeTapped:)];
 
-    /* 1 设置 / 2 截图 / 3 返回(撤销) / 4 清屏 / 5 颜色 / 6 关闭 */
+    /* 1 璁剧疆 / 2 鎴浘 / 3 杩斿洖(鎾ら攢) / 4 娓呭睆 / 5 棰滆壊 / 6 鍏抽棴 */
     NSArray<UIButton *> *buttons = @[_gear, _shot, _undo, _clear, _color, _close];
+    UIView *content = ((UIVisualEffectView *)_bar).contentView;
     for (NSUInteger i = 0; i < buttons.count; i++) {
         UIButton *b = buttons[i];
         b.frame = CGRectMake(6.0, 8.0 + i * 52.0, 44.0, 44.0);
-        [_bar addSubview:b];
+        [content addSubview:b];
     }
 
     [self updateColorIcon];
@@ -192,10 +207,10 @@
                        [[NSDate date] timeIntervalSince1970]]];
     BOOL ok = [png writeToFile:path atomically:YES];
 
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:(ok ? @"已保存" : @"保存失败")
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:(ok ? @"宸蹭繚瀛? : @"淇濆瓨澶辫触")
                                                                message:path
                                                         preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"濂? style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
@@ -237,7 +252,7 @@
     pop.sourceView = _color;
     pop.sourceRect = _color.bounds;
     pop.permittedArrowDirections = UIPopoverArrowDirectionLeft | UIPopoverArrowDirectionRight;
-    pop.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.98];
+    pop.backgroundColor = [UIColor clearColor];
 
     _palette = vc;
     [self presentViewController:vc animated:YES completion:^{
@@ -294,30 +309,30 @@
 }
 
 - (void)settingsTapped:(UIButton *)sender {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"绘图设置"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"缁樺浘璁剧疆"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"工具：%@", [RBPrefs toolName]]
+    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"宸ュ叿锛?@", [RBPrefs toolName]]
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showTools]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"线条颜色"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"绾挎潯棰滆壊"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self colorTapped:nil]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"线条粗细"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"绾挎潯绮楃粏"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showWidths]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"一键清屏"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"涓€閿竻灞?
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *a) { [self->_drawView clear]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"鍙栨秷" style:UIAlertActionStyleCancel handler:nil]];
 
     [self anchor:sheet to:sender];
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)showTools {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"绘图工具"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"缁樺浘宸ュ叿"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSString *> *names = [RBPrefs toolNames];
@@ -336,27 +351,28 @@
             self->_drawView.drawTool = t;
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"鍙栨秷" style:UIAlertActionStyleCancel handler:nil]];
     [self anchor:sheet to:_gear];
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)showWidths {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"线条粗细"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"绾挎潯绮楃粏"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSNumber *> *widths = [RBPrefs widths];
     for (NSUInteger i = 0; i < widths.count; i++) {
-        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%.0f 磅", widths[i].doubleValue]
+        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%.0f 纾?, widths[i].doubleValue]
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction *a) {
             [RBPrefs setWidthIndex:(NSInteger)i];
             self->_drawView.lineWidth = widths[i].doubleValue;
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"鍙栨秷" style:UIAlertActionStyleCancel handler:nil]];
     [self anchor:sheet to:_gear];
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 @end
+

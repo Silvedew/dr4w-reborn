@@ -193,38 +193,7 @@ static void RBBootstrap(void) {
         NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
 
         if (RBIsSpringBoard()) {
-            /* SpringBoard: keep the ball, plus the volume trigger */
-            [nc addObserverForName:UIApplicationDidBecomeActiveNotification
-                            object:nil
-                             queue:[NSOperationQueue mainQueue]
-                        usingBlock:^(NSNotification *note) {
-                if (![[RBManager shared] isShowing] && !RBOtherAppFrontmost())
-                    [[RBFloating shared] show];
-            }];
-            [[RBFloating shared] show];
-
-            int tOn = 0, tOff = 0;
-            notify_register_dispatch("com.dsh.dr4wreborn.appon", &tOn, dispatch_get_main_queue(), ^(int t) {
-                [[RBFloating shared] hide];
-            });
-            notify_register_dispatch("com.dsh.dr4wreborn.appoff", &tOff, dispatch_get_main_queue(), ^(int t) {
-                if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
-            });
-
-            /* authoritative check: hide the SpringBoard ball whenever any app
-               is frontmost, otherwise it floats above that app as a dead twin */
-            [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
-                static BOOL lastOther = NO;
-                BOOL other = RBOtherAppFrontmost();
-                if (other == lastOther) return;
-                lastOther = other;
-                if (other) {
-                    [[RBFloating shared] hide];
-                } else if (![[RBManager shared] isShowing]) {
-                    [[RBFloating shared] show];
-                }
-            }];
-
+            /* SpringBoard: volume trigger only, no ball (apps own the ball) */
             int token = 0;
             notify_register_dispatch("com.dsh.dr4wreborn.toggle", &token, dispatch_get_main_queue(), ^(int t) {
                 [[RBManager shared] toggle];
@@ -242,19 +211,17 @@ static void RBBootstrap(void) {
             return;
         }
 
-        /* every app: its own ball, and tell SpringBoard to hide its one */
+        /* every app: its own ball */
         [nc addObserverForName:UIApplicationDidBecomeActiveNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
-            notify_post("com.dsh.dr4wreborn.appon");
             if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
         }];
         [nc addObserverForName:UIApplicationDidEnterBackgroundNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
-            notify_post("com.dsh.dr4wreborn.appoff");
             [[RBFloating shared] hide];
         }];
         [[RBFloating shared] show];

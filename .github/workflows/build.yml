@@ -1,0 +1,66 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show SDK
+        run: xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Compile dylib (arm64 + arm64e)
+        run: |
+          set -euxo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -O2 -IEngine -IReborn"
+
+          for ARCH in arm64 arm64e; do
+            TARGET="$ARCH-apple-ios15.0"
+            OUT="build-$ARCH"
+            rm -rf "$OUT"; mkdir -p "$OUT"
+
+            # vendored engine is MRC
+            for f in Engine/*.m; do
+              xcrun --sdk iphoneos clang -target "$TARGET" $COMMON -fno-objc-arc -c "$f" \
+                -o "$OUT/eng-$(basename "$f" .m).o"
+            done
+
+            # our code is ARC
+            for f in Reborn/*.m; do
+              xcrun --sdk iphoneos clang -target "$TARGET" $COMMON -fobjc-arc -c "$f" \
+                -o "$OUT/rb-$(basename "$f" .m).o"
+            done
+
+            xcrun --sdk iphoneos clang -target "$TARGET" -isysroot "$SDK" -dynamiclib "$OUT"/*.o \
+              -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore \
+              -o "Dr4wReborn-$ARCH.dylib"
+          done
+
+          lipo -create Dr4wReborn-arm64.dylib Dr4wReborn-arm64e.dylib -output Dr4wReborn.dylib
+          lipo -info Dr4wReborn.dylib
+
+      - name: Package deb
+        run: |
+          set -euxo pipefail
+          brew install ldid dpkg
+          VER="0.1.${GITHUB_RUN_NUMBER}"
+          echo "building version $VER"
+          mkdir -p pkg/DEBIAN pkg/var/jb/Library/MobileSubstrate/DynamicLibraries
+          cp Dr4wReborn.dylib Dr4wReborn.plist pkg/var/jb/Library/MobileSubstrate/DynamicLibraries/
+          cp control pkg/DEBIAN/control
+          sed -i '' "s/^Version:.*/Version: ${VER}/" pkg/DEBIAN/control
+          grep -a '^Version' pkg/DEBIAN/control
+          ldid -S pkg/var/jb/Library/MobileSubstrate/DynamicLibraries/Dr4wReborn.dylib
+          dpkg-deb --build --root-owner-group pkg "Dr4wReborn_${VER}_iphoneos-arm64.deb"
+          ls -l Dr4wReborn_*.deb
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dr4wReborn-deb
+          path: Dr4wReborn_*.deb

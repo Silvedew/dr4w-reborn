@@ -35,6 +35,7 @@ static CGFloat const kSize = 56.0;
 
 @implementation RBFloating {
     RBFloatWindow *_win;
+    UIView *_ball;
     UIButton *_btn;
     BOOL _userHidden;
 }
@@ -72,12 +73,24 @@ static CGFloat const kSize = 56.0;
     vc.view = root;
     _win.rootViewController = vc;
 
+    /* frosted glass ball */
+    _ball = [[UIView alloc] initWithFrame:CGRectMake(0, 0, kSize, kSize)];
+    _ball.backgroundColor = [UIColor clearColor];
+
+    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:
+                                 [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialLight]];
+    glass.frame = _ball.bounds;
+    glass.layer.cornerRadius = kSize / 2.0;
+    glass.layer.cornerCurve = kCACornerCurveContinuous;
+    glass.layer.borderWidth = 0.5;
+    glass.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.6].CGColor;
+    glass.clipsToBounds = YES;
+    glass.userInteractionEnabled = NO;
+    [_ball addSubview:glass];
+
     _btn = [UIButton buttonWithType:UIButtonTypeSystem];
-    _btn.frame = CGRectMake(0, 0, kSize, kSize);
-    _btn.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.92];
-    _btn.layer.cornerRadius = kSize / 2.0;
-    _btn.layer.borderWidth = 1.0;
-    _btn.layer.borderColor = [UIColor colorWithWhite:0.0 alpha:0.15].CGColor;
+    _btn.frame = _ball.bounds;
+    _btn.backgroundColor = [UIColor clearColor];
     _btn.tintColor = [UIColor colorWithWhite:0.10 alpha:1.0];
 
     UIImageSymbolConfiguration *cfg =
@@ -99,15 +112,16 @@ static CGFloat const kSize = 56.0;
     press.minimumPressDuration = 0.6;
     [_btn addGestureRecognizer:press];
 
+    [_ball addSubview:_btn];
+    [root addSubview:_ball];
+
     CGPoint c = [RBPrefs floatCenter];
     CGFloat half = kSize / 2.0;
     if (c.x < half) c.x = half;
     if (c.y < half) c.y = half;
     if (c.x > root.bounds.size.width - half) c.x = root.bounds.size.width - half;
     if (c.y > root.bounds.size.height - half) c.y = root.bounds.size.height - half;
-    _btn.center = c;
-
-    [root addSubview:_btn];
+    _ball.center = c;
 }
 
 - (void)show {
@@ -135,11 +149,11 @@ static CGFloat const kSize = 56.0;
 }
 
 - (void)panned:(UIPanGestureRecognizer *)g {
-    UIView *host = _btn.superview;
+    UIView *host = _ball.superview;
     if (!host) return;
 
     CGPoint t = [g translationInView:host];
-    CGPoint c = _btn.center;
+    CGPoint c = _ball.center;
     c.x += t.x;
     c.y += t.y;
 
@@ -149,7 +163,7 @@ static CGFloat const kSize = 56.0;
     if (c.x > host.bounds.size.width - half - 8.0) c.x = host.bounds.size.width - half - 8.0;
     if (c.y > host.bounds.size.height - half - 8.0) c.y = host.bounds.size.height - half - 8.0;
 
-    _btn.center = c;
+    _ball.center = c;
 
     CGPoint zero;
     zero.x = 0.0;

@@ -137,4 +137,49 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
     [d setDouble:center.y forKey:@"floatY"];
 }
 
+#pragma mark - ball
+
++ (CGFloat)ballSize {
+    CGFloat v = [[self defaults] doubleForKey:@"ballSize"];
+    if (v < 40.0 || v > 80.0) v = 56.0;
+    return v;
+}
+
++ (void)setBallSize:(CGFloat)size {
+    [[self defaults] setDouble:size forKey:@"ballSize"];
+}
+
++ (CGFloat)ballAlpha {
+    CGFloat v = [[self defaults] doubleForKey:@"ballAlpha"];
+    if (v < 0.3 || v > 1.0) v = 1.0;
+    return v;
+}
+
++ (void)setBallAlpha:(CGFloat)alpha {
+    [[self defaults] setDouble:alpha forKey:@"ballAlpha"];
+}
+
+#pragma mark - per-app switch
+
++ (NSArray<NSString *> *)disabledApps {
+    NSArray *a = [[self defaults] arrayForKey:@"disabledApps"];
+    return a ?: @[];
+}
+
++ (BOOL)isAppDisabled:(NSString *)bundleID {
+    if (!bundleID) return NO;
+    return [[self disabledApps] containsObject:bundleID];
+}
+
++ (void)setAppDisabled:(NSString *)bundleID disabled:(BOOL)disabled {
+    if (!bundleID) return;
+    NSMutableArray *list = [[self disabledApps] mutableCopy];
+    if (disabled) {
+        if (![list containsObject:bundleID]) [list addObject:bundleID];
+    } else {
+        [list removeObject:bundleID];
+    }
+    [[self defaults] setObject:list forKey:@"disabledApps"];
+}
+
 @end

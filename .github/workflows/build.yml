@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   push:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-14
@@ -30,7 +33,7 @@ jobs:
           set -euxo pipefail
           brew install ldid dpkg
           VER="0.1.${GITHUB_RUN_NUMBER}"
-          echo "building version $VER"
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
           mkdir -p pkg/DEBIAN pkg/var/jb/Library/MobileSubstrate/DynamicLibraries
           cp Dr4wReborn.dylib Dr4wReborn.plist pkg/var/jb/Library/MobileSubstrate/DynamicLibraries/
           cp control pkg/DEBIAN/control
@@ -40,7 +43,17 @@ jobs:
           dpkg-deb --build --root-owner-group pkg "Dr4wReborn_${VER}_iphoneos-arm64.deb"
           ls -l Dr4wReborn_*.deb
 
-      - name: Upload
+      - name: Publish release (raw .deb)
+        run: |
+          set -euxo pipefail
+          gh release create "build-${GITHUB_RUN_NUMBER}" Dr4wReborn_*.deb \
+            --title "Dr4w Reborn ${VERSION}" \
+            --notes "自动构建 ${VERSION}（${GITHUB_SHA}）" \
+            --prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload artifact (backup)
         uses: actions/upload-artifact@v4
         with:
           name: Dr4wReborn-deb

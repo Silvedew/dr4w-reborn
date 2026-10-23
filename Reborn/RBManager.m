@@ -190,10 +190,14 @@ static void RBBootstrap(void) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIWindowSceneDidUpdateCoordinateSpaceNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification *note) {
+        /* split view / slide over resize the scene without a convenient
+           notification on this SDK: watch the host size cheaply */
+        [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
+            static CGFloat lastW = 0, lastH = 0;
+            CGRect host = RBHostBounds();
+            if (host.size.width == lastW && host.size.height == lastH) return;
+            lastW = host.size.width;
+            lastH = host.size.height;
             [[RBManager shared] layoutForCurrentHost];
         }];
 

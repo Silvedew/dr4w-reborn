@@ -211,7 +211,10 @@
     }];
 
     NSData *png = UIImagePNGRepresentation(flat);
-    NSString *dir = @"/var/mobile/Media/Dr4wReborn";
+    NSString *dir = RBIsSpringBoard()
+        ? @"/var/mobile/Media/Dr4wReborn"
+        : [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
+           stringByAppendingPathComponent:@"Dr4wReborn"];
     [[NSFileManager defaultManager] createDirectoryAtPath:dir
                              withIntermediateDirectories:YES
                                               attributes:nil

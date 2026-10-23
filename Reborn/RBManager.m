@@ -7,6 +7,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <math.h>
+#import <dlfcn.h>
 
 #pragma mark - volume source
 
@@ -21,6 +22,21 @@ static NSTimeInterval gLastPress  = 0;
 
 BOOL RBIsSpringBoard(void) {
     return [[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"];
+}
+
+/* YES when something other than SpringBoard is frontmost (an app is on screen) */
+static BOOL RBOtherAppFrontmost(void) {
+    static NSString *(*frontmost)(void) = NULL;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        void *h = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
+                         RTLD_LAZY);
+        if (h) frontmost = (NSString *(*)(void))dlsym(h, "SBFrontmostApplicationDisplayIdentifier");
+    });
+    if (!frontmost) return NO;
+    NSString *bid = frontmost();
+    if (!bid) return NO;
+    return ![bid isEqualToString:@"com.apple.springboard"];
 }
 
 void RBWriteLog(NSString *text) {
@@ -194,7 +210,8 @@ static void RBBootstrap(void) {
                             object:nil
                              queue:[NSOperationQueue mainQueue]
                         usingBlock:^(NSNotification *note) {
-                if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
+                if (![[RBManager shared] isShowing] && !RBOtherAppFrontmost())
+                    [[RBFloating shared] show];
             }];
             [[RBFloating shared] show];
 
@@ -205,6 +222,17 @@ static void RBBootstrap(void) {
             notify_register_dispatch("com.dsh.dr4wreborn.appoff", &tOff, dispatch_get_main_queue(), ^(int t) {
                 if (![[RBManager shared] isShowing]) [[RBFloating shared] show];
             });
+
+            /* authoritative check: hide the SpringBoard ball whenever any app
+               is frontmost, otherwise it floats above that app as a dead twin */
+            [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
+                BOOL other = RBOtherAppFrontmost();
+                if (other) {
+                    [[RBFloating shared] hide];
+                } else if (![[RBManager shared] isShowing]) {
+                    [[RBFloating shared] show];
+                }
+            }];
 
             int token = 0;
             notify_register_dispatch("com.dsh.dr4wreborn.toggle", &token, dispatch_get_main_queue(), ^(int t) {

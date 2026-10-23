@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 
 void RBWriteLog(NSString *text);
+BOOL RBIsSpringBoard(void);
 
 @interface RBManager : NSObject
 

@@ -11,8 +11,7 @@ test('backgrounding invalidates the layout timer and foregrounding restarts it',
   assert.match(manager, /UIApplicationDidEnterBackgroundNotification[\s\S]*?RBStopLayoutPolling\(\);/);
   assert.match(manager, /UIApplicationDidBecomeActiveNotification[\s\S]*?RBStartLayoutPolling\(\);/);
   assert.match(manager, /if \(gLayoutTimer\) return;/);
-  const springboard = manager.slice(manager.indexOf('if (RBIsSpringBoard()) {', manager.indexOf('static void RBBootstrap')));
-  assert.ok(springboard.indexOf('return;') < springboard.indexOf('RBStartLayoutPolling();'));
+  assert.match(manager, /RBStartLayoutPolling\(void\)\s*\{\s*if \(RBIsSpringBoard\(\)\) return;/);
 });
 
 test('SpringBoard never polls private audio or frontmost-app interfaces', () => {
@@ -21,36 +20,57 @@ test('SpringBoard never polls private audio or frontmost-app interfaces', () => 
   const bootstrap = manager.slice(manager.indexOf('static void RBBootstrap'));
   const springboard = bootstrap.slice(bootstrap.indexOf('if (RBIsSpringBoard())'), bootstrap.indexOf('/* every app:'));
   assert.doesNotMatch(springboard, /scheduledTimer|dispatch_source_create/);
-  assert.match(springboard, /AVSystemController_SystemVolumeDidChangeNotification/);
+  assert.match(springboard, /RBInstallVolumeHooks/);
 });
 
-test('volume notifications are validated and handled on the main queue', () => {
-  const manager = source('Reborn/RBManager.m');
-  const callback = manager.slice(manager.indexOf('static void RBVolumeNote'), manager.indexOf('#pragma mark - startup'));
-  assert.match(callback, /isKindOfClass:\[NSNumber class\]/);
-  assert.match(callback, /dispatch_async\(dispatch_get_main_queue\(\), \^\{ RBHandleVolume\(volume\); \}\)/);
-  assert.match(manager, /!isfinite\(v\) \|\| v < 0.0f \|\| v > 1.0f/);
+test('button hooks check signatures, preserve volume handling, and dispatch on the main queue', () => {
+  const hooks = source('Reborn/RBSystemHooks.m');
+  assert.match(hooks, /method_getNumberOfArguments\(method\) != 2/);
+  assert.match(hooks, /strcmp\(result, @encode\(void\)\) == 0/);
+  assert.match(hooks, /gOriginalUp\(self, command\);\s*dispatch_async\(dispatch_get_main_queue\(\)/);
+  assert.match(hooks, /gOriginalDown\(self, command\);\s*dispatch_async\(dispatch_get_main_queue\(\)/);
+  assert.doesNotMatch(hooks, /outputVolume|setVolume|AVSystemController/);
 });
 
 test('locking resets the trigger and closes the drawing window', () => {
   const manager = source('Reborn/RBManager.m');
-  assert.match(manager, /static BOOL\s+gDeviceLocked = YES;/);
   assert.match(manager, /com.apple.springboard.lockstate/);
-  assert.match(manager, /gDeviceLocked = state != 0;[\s\S]*?gBuffer = @"";[\s\S]*?gLastPress = 0;[\s\S]*?if \(gDeviceLocked\) \[\[RBManager shared\] dismiss\];/);
-  assert.match(manager, /if \(RBIsSpringBoard\(\)\) return !gDeviceLocked;/);
+  assert.match(manager, /gVolumeSequence = \(RBVolumeSequence\)\{0\};\s*if \(RBDeviceIsLocked\(\)\) \[\[RBManager shared\] dismiss\];/);
+  assert.match(manager, /if \(RBIsSpringBoard\(\)\) return !RBDeviceIsLocked\(\) && RBHomeIsVisible\(\);/);
+  assert.match(source('Reborn/RBSystemHooks.m'), /return \[manager isUILocked\];/);
   assert.match(manager, /if \(self->_window != w\) return;\s*if \(!RBMayPresent\(\)\) return;/);
 });
 
-test('balls default to hidden, and enabling is stored as an explicit per-app opt-in', () => {
-  const prefs = source('Reborn/RBPrefs.m');
-  const policy = prefs.slice(prefs.indexOf('+ (BOOL)isAppDisabled:'));
-  assert.match(policy, /if \(!bundleID\) return YES;/);
-  assert.match(policy, /arrayForKey:@"enabledBallApps"/);
-  assert.match(policy, /return !\[enabled containsObject:bundleID\];/);
-  assert.match(policy, /if \(disabled\)\s*\{\s*\[list removeObject:bundleID\];\s*\} else \{\s*if \(!\[list containsObject:bundleID\]\) \[list addObject:bundleID\];/);
-  assert.doesNotMatch(policy, /@"disabledApps"/);
+test('ball visibility and per-app activation remain independent', () => {
+  const settings = source('Shared/RBSettings.h');
+  assert.match(settings, /RBSetting\(@"enabledApps", @\[\]\)/);
+  assert.match(settings, /RBSettingBool\(@"showBall", NO\)/);
+  assert.match(settings, /RBPolicyBall\(RBEnabledForBundle\(bundleID\)/);
+  assert.match(source('Reborn/RBPrefs.m'), /return !RBBallForBundle\(bundleID\);/);
   const manager = source('Reborn/RBManager.m');
   assert.match(manager, /if \(\[RBPrefs isAppDisabled:[\s\S]*?&&\s*!\[\[RBManager shared\] isShowing\]\) return;/);
+  assert.match(manager, /if \(!RBEnabledForBundle\(\[\[NSBundle mainBundle\] bundleIdentifier\]\)\) return NO;/);
+});
+
+test('settings save to a shared domain and notify running apps', () => {
+  const settings = source('Shared/RBSettings.h');
+  assert.match(settings, /CFPreferencesSetValue/);
+  assert.match(settings, /if \(saved\) notify_post\(RB_SETTINGS_CHANGED\)/);
+  const manager = source('Reborn/RBManager.m');
+  assert.match(manager, /notify_register_dispatch\(RB_SETTINGS_CHANGED[\s\S]*?RBReloadSettings\(\)/);
+  assert.match(manager, /notify_register_dispatch\("com.dsh.dr4wreborn.toggle"[\s\S]*?if \(RBMayPresent\(\)\) \[\[RBManager shared\] toggle\];/);
+});
+
+test('Settings entry, preference bundle, and dependency are included in packaging', () => {
+  const workflow = source('.github/workflows/build.yml');
+  const entry = source('Preferences/Dr4wReborn.plist');
+  assert.match(entry, /\/var\/jb\/Library\/PreferenceBundles\/Dr4wRebornPrefs.bundle/);
+  assert.match(source('Preferences/Info.plist'), /<string>RBRootListController<\/string>/);
+  assert.match(workflow, /Preferences\/RBRootListController.m/);
+  assert.match(workflow, /cp Dr4wRebornPrefs Preferences\/Info.plist/);
+  assert.match(workflow, /Library\/PreferenceLoader\/Preferences/);
+  assert.match(source('control'), /Depends:.*preferenceloader/);
+  assert.match(workflow, /Depends:.*preferenceloader/);
 });
 
 test('inactive apps cannot restore the floating window', () => {

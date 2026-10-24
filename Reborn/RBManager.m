@@ -3,21 +3,17 @@
 #import "RBController.h"
 #import "RBFloating.h"
 #import "RBPrefs.h"
-#import <AVFoundation/AVFoundation.h>
+#import "RBSystemHooks.h"
+#import "RBSettings.h"
+#import <QuartzCore/QuartzCore.h>
 
 #import <notify.h>
-#import <math.h>
-
-#pragma mark - volume source
-
-static float          gLastVolume = -1.0f;
-static NSString      *gBuffer     = @"";
-static NSTimeInterval gLastPress  = 0;
 static NSTimer       *gLayoutTimer = nil;
-static BOOL           gDeviceLocked = YES;
+static RBVolumeSequence gVolumeSequence = {0};
 
 static BOOL RBMayPresent(void) {
-    if (RBIsSpringBoard()) return !gDeviceLocked;
+    if (!RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier])) return NO;
+    if (RBIsSpringBoard()) return !RBDeviceIsLocked() && RBHomeIsVisible();
     return [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
 }
 
@@ -127,8 +123,9 @@ CGRect RBHostBounds(void) {
     _window.rootViewController = nil;
     _window = nil;
 
-    if (_previousKey && !_previousKey.hidden &&
-        RBMayPresent())
+    BOOL canRestoreKey = RBIsSpringBoard() ? !RBDeviceIsLocked() :
+        [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+    if (_previousKey && !_previousKey.hidden && canRestoreKey)
         [_previousKey makeKeyWindow];
     _previousKey = nil;
 
@@ -148,43 +145,6 @@ CGRect RBHostBounds(void) {
 
 @end
 
-#pragma mark - volume trigger
-
-static void RBHandleVolume(float v) {
-    if (!isfinite(v) || v < 0.0f || v > 1.0f) return;
-    if (!RBMayPresent()) {
-        gLastVolume = -1.0f;
-        gBuffer = @"";
-        gLastPress = 0;
-        return;
-    }
-    if (gLastVolume < 0) { gLastVolume = v; return; }
-    if (fabsf(v - gLastVolume) < 0.004f) return;
-
-    char c = (v > gLastVolume) ? 'U' : 'D';
-    gLastVolume = v;
-
-    NSTimeInterval now = [[NSDate date] timeIntervalSince1970] * 1000.0;
-    if (now - gLastPress > 900.0) gBuffer = @"";
-    gLastPress = now;
-    gBuffer = [gBuffer stringByAppendingFormat:@"%c", c];
-
-    if ([gBuffer containsString:@"UD"]) {
-        gBuffer = @"";
-        [[RBManager shared] toggle];
-    }
-}
-
-static void RBVolumeNote(CFNotificationCenterRef center, void *observer,
-                         CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    NSDictionary *info = (__bridge NSDictionary *)userInfo;
-    NSNumber *n = info[@"AVSystemController_AudioVolumeNotificationParameter"];
-    if (![n isKindOfClass:[NSNumber class]]) return;
-    float volume = n.floatValue;
-    // Notification delivery need not originate on the UIKit thread.
-    dispatch_async(dispatch_get_main_queue(), ^{ RBHandleVolume(volume); });
-}
-
 #pragma mark - startup
 
 __attribute__((constructor))
@@ -193,36 +153,36 @@ static void RBBootstrap(void) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
+        RBReloadSettings();
+        int settingsToken = 0;
+        notify_register_dispatch(RB_SETTINGS_CHANGED, &settingsToken, dispatch_get_main_queue(), ^(int t) {
+            RBReloadSettings();
+            gVolumeSequence = (RBVolumeSequence){0};
+            if (!RBMayPresent()) [[RBManager shared] dismiss];
+            [[RBFloating shared] refreshVisibility];
+            RBStopLayoutPolling();
+            if (RBMayPresent()) RBStartLayoutPolling();
+        });
+
+        int toggleToken = 0;
+        notify_register_dispatch("com.dsh.dr4wreborn.toggle", &toggleToken, dispatch_get_main_queue(), ^(int t) {
+            if (RBMayPresent()) [[RBManager shared] toggle];
+        });
+
         if (RBIsSpringBoard()) {
-            /* SpringBoard: volume trigger only, no ball */
-            int token = 0;
-            notify_register_dispatch("com.dsh.dr4wreborn.toggle", &token, dispatch_get_main_queue(), ^(int t) {
-                [[RBManager shared] toggle];
+            BOOL installed = RBInstallVolumeHooks(^(BOOL up) {
+                BOOL allowed = RBSettingBool(@"enabled", YES) &&
+                    RBSettingBool(@"volumeShortcutEnabled", YES) && !RBDeviceIsLocked();
+                if (RBVolumePress(&gVolumeSequence, up, CACurrentMediaTime(), allowed))
+                    notify_post("com.dsh.dr4wreborn.toggle");
             });
-
-            CFNotificationCenterAddObserver(CFNotificationCenterGetLocalCenter(), NULL,
-                                            RBVolumeNote,
-                                            CFSTR("AVSystemController_SystemVolumeDidChangeNotification"),
-                                            NULL,
-                                            CFNotificationSuspensionBehaviorDeliverImmediately);
-
-            // SpringBoard can be inactive while an unlocked app is in front.
+            NSLog(@"[Dr4wReborn] volume button hooks: %@", installed ? @"ready" : @"unavailable");
             int lockToken = 0;
-            if (notify_register_dispatch("com.apple.springboard.lockstate", &lockToken,
+            notify_register_dispatch("com.apple.springboard.lockstate", &lockToken,
                 dispatch_get_main_queue(), ^(int t) {
-                    uint64_t state = 1;
-                    if (notify_get_state(t, &state) != NOTIFY_STATUS_OK) return;
-                    gDeviceLocked = state != 0;
-                    gLastVolume = gDeviceLocked ? -1.0f : [AVAudioSession sharedInstance].outputVolume;
-                    gBuffer = @"";
-                    gLastPress = 0;
-                    if (gDeviceLocked) [[RBManager shared] dismiss];
-                }) == NOTIFY_STATUS_OK) {
-                uint64_t state = 1;
-                if (notify_get_state(lockToken, &state) == NOTIFY_STATUS_OK)
-                    gDeviceLocked = state != 0;
-            }
-            if (!gDeviceLocked) gLastVolume = [AVAudioSession sharedInstance].outputVolume;
+                    gVolumeSequence = (RBVolumeSequence){0};
+                    if (RBDeviceIsLocked()) [[RBManager shared] dismiss];
+                });
             return;
         }
 
@@ -232,6 +192,7 @@ static void RBBootstrap(void) {
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
+            RBReloadSettings();
             [[RBFloating shared] refreshVisibility];
             RBStartLayoutPolling();
         }];

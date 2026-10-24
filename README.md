@@ -23,7 +23,9 @@ Reborn/
   RBController.m/h       canvas + toolbar + settings
   RBPrefs.m/h            tool / color / width persistence
 
-Dr4wReborn.plist        inject only into SpringBoard
+Preferences/           system Settings page and installed-app switches
+Shared/                settings storage and tested activation/shortcut policy
+Dr4wReborn.plist        inject into SpringBoard and UIKit apps
 control                 deb metadata
 .github/workflows/      builds the deb on every push
 ```
@@ -38,9 +40,12 @@ control                 deb metadata
 - Screenshot: flattens the drawing onto white and saves a PNG to
   `/var/mobile/Media/Dr4wReborn/`
 - Summon / dismiss with **Volume Up -> Volume Down** (within 0.9 s, device unlocked)
-- Floating balls are hidden in every app by default, including after upgrading
-- Locking closes the drawing panel; SpringBoard uses volume notifications instead
-  of polling private audio interfaces
+- Settings -> 全局画板: master switch, home-screen switch, volume shortcut,
+  floating-ball visibility, and an installed-app enable list
+- Apps default to disabled; floating balls default to hidden. Enabling an app
+  does not require displaying its ball. Settings changes apply without respringing.
+- Locking closes the drawing panel; SpringBoard observes volume button methods
+  instead of polling audio or frontmost-app interfaces. Normal volume behavior is preserved.
 - Preferences persist between launches
 
 ## Install
@@ -48,7 +53,11 @@ control                 deb metadata
 1. Actions tab -> `build` -> Run workflow (or just push).
 2. Download the `Dr4wReborn-deb` artifact and install with Sileo/Filza.
 3. Respring.
-4. Press Volume Up, then Volume Down, to open the panel.
+4. Open Settings -> 全局画板 -> 在哪些 App 启用 and enable the apps you want.
+5. In an enabled app (or on the home screen), press Volume Up then Volume Down
+   within 0.9 seconds to toggle the panel. The volume shortcut has its own switch.
+6. Leave 在已启用的 App 显示圆球 off to keep balls hidden. Enable it if you prefer
+   a visible entry; an app's in-panel ball switch overrides this default.
 
 After upgrading, respring before testing so SpringBoard unloads the old dylib.
 Device stability checks are listed in [tests/IPAD-SMOKE-TEST.md](tests/IPAD-SMOKE-TEST.md).
@@ -71,7 +80,7 @@ Everything is ordinary Objective-C; rebuild after each edit.
 - The screenshot saves the **drawing on a white background**, not a capture of the
   SpringBoard content behind it (capturing the screen needs a private snapshot API;
   can be added later).
-- No Preference bundle yet; settings live in the in-panel menu.
+- The Settings page requires PreferenceLoader, installed as a package dependency.
 - Text tool uses the system keyboard (the window is made key while open).
 
 ## License / attribution

@@ -20,6 +20,14 @@ jobs:
       - name: Performance regression guards
         run: node --test tests/performance.test.cjs
 
+      - name: Activation and settings behavior tests
+        run: |
+          clang -std=c11 -Wall -Wextra -Werror -IShared tests/policy_test.c -o /tmp/rb-policy-tests
+          /tmp/rb-policy-tests
+          clang -fobjc-arc -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m -o /tmp/rb-settings-tests
+          /tmp/rb-settings-tests
+          plutil -lint Preferences/Info.plist Preferences/Dr4wReborn.plist
+
       - name: Show SDK
         run: xcrun --sdk iphoneos --show-sdk-path
 
@@ -29,11 +37,20 @@ jobs:
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           SRCS=$(find Engine Reborn -name '*.m')
           echo "$SRCS"
-          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IEngine -IReborn -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore -framework AVFoundation"
+          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IEngine -IReborn -IShared -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore"
           xcrun --sdk iphoneos clang -target arm64-apple-ios15.0  $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64.dylib
           xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64e.dylib
           lipo -create Dr4wReborn-arm64.dylib Dr4wReborn-arm64e.dylib -output Dr4wReborn.dylib
           lipo -info Dr4wReborn.dylib
+
+      - name: Compile Settings bundle (arm64 + arm64e)
+        run: |
+          set -euxo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IShared -framework Foundation -framework UIKit -framework MobileCoreServices -dynamiclib -undefined dynamic_lookup -install_name /var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle/Dr4wRebornPrefs"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 $COMMON Preferences/RBRootListController.m -o Prefs-arm64
+          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 $COMMON Preferences/RBRootListController.m -o Prefs-arm64e
+          lipo -create Prefs-arm64 Prefs-arm64e -output Dr4wRebornPrefs
 
       - name: Package deb
         run: |
@@ -44,9 +61,13 @@ jobs:
           mkdir -p pkg/DEBIAN pkg/var/jb/Library/MobileSubstrate/DynamicLibraries
           cp Dr4wReborn.dylib Dr4wReborn.plist pkg/var/jb/Library/MobileSubstrate/DynamicLibraries/
           cp control pkg/DEBIAN/control
+          mkdir -p pkg/var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle pkg/var/jb/Library/PreferenceLoader/Preferences
+          cp Dr4wRebornPrefs Preferences/Info.plist pkg/var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle/
+          cp Preferences/Dr4wReborn.plist pkg/var/jb/Library/PreferenceLoader/Preferences/
           sed -i '' "s/^Version:.*/Version: ${VER}/" pkg/DEBIAN/control
           grep -a '^Version' pkg/DEBIAN/control
           ldid -S pkg/var/jb/Library/MobileSubstrate/DynamicLibraries/Dr4wReborn.dylib
+          ldid -S pkg/var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle/Dr4wRebornPrefs
           dpkg-deb --build --root-owner-group pkg "Dr4wReborn_${VER}_iphoneos-arm64.deb"
           ls -l Dr4wReborn_*.deb
 
@@ -75,7 +96,7 @@ jobs:
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           BASE="https://${OWNER}.github.io/${REPO_NAME}"
 
-          printf 'Package: com.dsh.dr4wreborn\nName: 全局画板\nVersion: %s\nArchitecture: iphoneos-arm64\nDescription: 全局画板 —— 任意界面手绘标注，开源可改\nMaintainer: dsh\nAuthor: dsh\nSection: Tweaks\nDepends: mobilesubstrate | ellekit\nFilename: %s/%s\nSize: %s\nMD5sum: %s\nSHA256: %s\n\n' \
+          printf 'Package: com.dsh.dr4wreborn\nName: 全局画板\nVersion: %s\nArchitecture: iphoneos-arm64\nDescription: 全局画板 —— 任意界面手绘标注，开源可改\nMaintainer: dsh\nAuthor: dsh\nSection: Tweaks\nDepends: mobilesubstrate | ellekit, preferenceloader\nFilename: %s/%s\nSize: %s\nMD5sum: %s\nSHA256: %s\n\n' \
             "${VERSION}" "${BASE}" "${DEB}" "${SIZE}" "${MD5}" "${SHA}" > site/Packages
           gzip -c site/Packages > site/Packages.gz
 

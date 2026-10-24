@@ -1,4 +1,5 @@
 #import "RBPrefs.h"
+#import "RBSettings.h"
 
 static NSString *const kDomain = @"com.dsh.dr4wreborn";
 
@@ -165,21 +166,16 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 #pragma mark - per-app switch
 
 + (BOOL)isAppDisabled:(NSString *)bundleID {
-    if (!bundleID) return YES;
-    NSArray *enabled = [[self defaults] arrayForKey:@"enabledBallApps"];
-    return ![enabled containsObject:bundleID];
+    return !RBBallForBundle(bundleID);
 }
 
 + (void)setAppDisabled:(NSString *)bundleID disabled:(BOOL)disabled {
     if (!bundleID) return;
-    NSMutableArray *list = [[[self defaults] arrayForKey:@"enabledBallApps"] mutableCopy];
-    if (!list) list = [NSMutableArray array];
-    if (disabled) {
-        [list removeObject:bundleID];
-    } else {
-        if (![list containsObject:bundleID]) [list addObject:bundleID];
-    }
-    [[self defaults] setObject:list forKey:@"enabledBallApps"];
+    id value = RBSetting(@"ballOverrides", @{});
+    NSMutableDictionary *overrides = [value isKindOfClass:[NSDictionary class]]
+        ? [value mutableCopy] : [NSMutableDictionary dictionary];
+    overrides[bundleID] = @(!disabled);
+    RBWriteSetting(@"ballOverrides", overrides);
 }
 
 @end

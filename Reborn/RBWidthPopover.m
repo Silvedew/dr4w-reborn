@@ -76,14 +76,13 @@
     RBWidthPreview *_track;
     RBWidthPreview *_preview;
     UILabel *_title;
-    UILabel *_value;
 }
 - (instancetype)initWithWidth:(CGFloat)width change:(void (^)(CGFloat))change commit:(void (^)(CGFloat))commit {
     if ((self = [super initWithNibName:nil bundle:nil])) {
         _width = RBStrokeWidth(width, 2);
         _change = [change copy];
         _commit = [commit copy];
-        self.preferredContentSize = CGSizeMake(180, 300);
+        self.preferredContentSize = CGSizeMake(80, 208);
     }
     return self;
 }
@@ -92,16 +91,13 @@
     self.view.backgroundColor = UIColor.clearColor;
     _title = [[UILabel alloc] initWithFrame:CGRectZero];
     _title.text = @"粗细";
-    _title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    _title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    _title.textAlignment = NSTextAlignmentCenter;
     _title.adjustsFontForContentSizeCategory = YES;
+    _title.adjustsFontSizeToFitWidth = YES;
+    _title.minimumScaleFactor = 0.7;
     _title.textColor = UIColor.labelColor;
-    _value = [[UILabel alloc] initWithFrame:CGRectZero];
-    _value.textColor = UIColor.secondaryLabelColor;
-    _value.font = [UIFont monospacedDigitSystemFontOfSize:17 weight:UIFontWeightMedium];
-    _value.textAlignment = NSTextAlignmentCenter;
-    _value.isAccessibilityElement = NO;
     [self.view addSubview:_title];
-    [self.view addSubview:_value];
     _track = [[RBWidthPreview alloc] initWithFrame:CGRectZero];
     _track.track = YES;
     _track.backgroundColor = UIColor.clearColor;
@@ -126,18 +122,17 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat width = self.view.bounds.size.width;
-    CGFloat heading = MAX(28, _title.font.lineHeight + 4);
-    CGSize preferred = CGSizeMake(180, heading + 272);
+    CGFloat heading = MAX(24, _title.font.lineHeight + 4);
+    CGSize preferred = CGSizeMake(80, heading + 184);
     if (!CGSizeEqualToSize(preferred, self.preferredContentSize)) self.preferredContentSize = preferred;
-    _title.frame = CGRectMake(12, 8, width - 24, heading);
-    _value.frame = CGRectMake(12, heading + 12, width - 24, 24);
-    _slider.bounds = CGRectMake(0, 0, 168, 52);
-    _slider.center = CGPointMake(width / 2, heading + 124);
+    _title.frame = CGRectMake(8, 0, width - 16, heading);
+    _slider.bounds = CGRectMake(0, 0, 124, 44);
+    _slider.center = CGPointMake(width / 2, heading + 72);
     _slider.transform = CGAffineTransformMakeRotation(-M_PI_2);
-    _track.bounds = CGRectMake(0, 0, 136, 52);
+    _track.bounds = CGRectMake(0, 0, 92, 44);
     _track.center = _slider.center;
     _track.transform = _slider.transform;
-    _preview.frame = CGRectMake(12, heading + 224, width - 24, 36);
+    _preview.frame = CGRectMake(8, heading + 140, width - 16, 32);
 }
 - (UIImage *)thumb {
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(44, 44)];
@@ -162,7 +157,6 @@
 - (void)updateWidth {
     _slider.value = _width;
     _slider.accessibilityValue = [NSString stringWithFormat:@"%.0f 磅", _width];
-    _value.text = _slider.accessibilityValue;
     [_slider setThumbImage:[self thumb] forState:UIControlStateNormal];
     _track.width = _preview.width = _width;
     [_track setNeedsDisplay];

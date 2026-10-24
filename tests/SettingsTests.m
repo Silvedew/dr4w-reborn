@@ -27,6 +27,18 @@ int main(void) {
         assert(!RBSaveToolbarPosition(@"test.reader", (RBToolbarPosition){NAN,0.3}));
         assert(!RBSaveToolbarPosition(@"test.reader", (RBToolbarPosition){0.2,2}));
         assert(RBWriteSetting(@"toolbarPositions", nil));
+        assert(RBWriteSetting(@"brushColors", @{@"0":@[@0.1,@0.2,@0.3,@1],
+            @"1":@[@0,@0], @"2":@[@2,@0,@0,@1]}));
+        assert(RBBrushColorForSlot(0).count == 4);
+        assert(!RBBrushColorForSlot(1) && !RBBrushColorForSlot(2) && !RBBrushColorForSlot(4));
+        assert(RBWriteSetting(@"brushSelectedSlot", @0));
+        assert(RBSelectedBrushSlot() == 0);
+        assert(RBWriteSetting(@"brushSelectedSlot", @1.5));
+        assert(RBSelectedBrushSlot() == -1);
+        assert(!RBSaveBrushColor(4, @[@0,@0,@0,@1]));
+        assert(!RBSaveBrushColor(0, @[@0,@(NAN),@0,@1]));
+        assert(RBWriteSetting(@"brushColors", nil));
+        assert(RBWriteSetting(@"brushSelectedSlot", nil));
         NSArray *keys = @[@"enabled", @"homeEnabled", @"volumeShortcutEnabled",
             @"showBall", @"enabledApps", @"ballOverrides"];
         for (NSString *key in keys) assert(RBWriteSetting(key, nil));

@@ -1,9 +1,11 @@
 #import "RBBrushPopover.h"
 #import "RBChrome.h"
 #import "RBWidthPopover.h"
+#import "RBBrushLayout.h"
+#import "RBSettings.h"
 #include <math.h>
 
-@interface RBBrushPopover () <UIColorPickerViewControllerDelegate>
+@interface RBBrushPopover () <UIColorPickerViewControllerDelegate, UIPopoverPresentationControllerDelegate>
 @end
 
 @implementation RBBrushPopover {
@@ -11,13 +13,13 @@
     void (^_colorChange)(UIColor *);
     RBWidthPopover *_widthController;
     UIScrollView *_scroll;
-    UILabel *_heading;
-    UILabel *_colorHeading;
-    UIButton *_done;
-    UIButton *_more;
-    NSArray<UIColor *> *_colors;
+    UIButton *_close;
+    NSMutableArray<UIColor *> *_colors;
     NSArray<UIButton *> *_buttons;
-    NSArray<UILabel *> *_checks;
+    NSInteger _selectedSlot;
+    BOOL _colorDirty;
+    UIColorPickerViewController *_picker;
+    CGSize _availableSize;
 }
 - (instancetype)initWithColor:(UIColor *)color width:(CGFloat)width
     colorChange:(void (^)(UIColor *))colorChange widthChange:(void (^)(CGFloat))widthChange
@@ -25,75 +27,67 @@
     if ((self = [super initWithNibName:nil bundle:nil])) {
         _color = color;
         _colorChange = [colorChange copy];
-        _colors = @[[UIColor colorWithWhite:0.05 alpha:1], UIColor.systemRedColor,
-            UIColor.systemBlueColor, UIColor.systemGreenColor];
+        _colors = [@[[UIColor colorWithWhite:0.05 alpha:1], UIColor.systemRedColor,
+            UIColor.systemBlueColor, UIColor.systemGreenColor] mutableCopy];
+        for (NSUInteger i = 0; i < RBBrushColorCount; i++) {
+            NSArray *rgba = RBBrushColorForSlot(i);
+            if (rgba) _colors[i] = [UIColor colorWithRed:[rgba[0] doubleValue] green:[rgba[1] doubleValue]
+                blue:[rgba[2] doubleValue] alpha:[rgba[3] doubleValue]];
+        }
+        NSInteger saved = RBSelectedBrushSlot();
+        _selectedSlot = saved >= 0 && [self matchesColor:_colors[saved]] ? saved : -1;
+        if (_selectedSlot < 0) {
+            for (NSUInteger i = 0; i < RBBrushColorCount; i++) {
+                if ([self matchesColor:_colors[i]]) { _selectedSlot = i; break; }
+            }
+        }
         _widthController = [[RBWidthPopover alloc] initWithWidth:width change:widthChange commit:widthCommit];
-        self.preferredContentSize = CGSizeMake(220, 676);
+        self.preferredContentSize = CGSizeMake(RBBrushWidth, RBBrushHeight);
         self.modalPresentationStyle = UIModalPresentationPopover;
+        self.popoverPresentationController.delegate = self;
+        self.popoverPresentationController.popoverLayoutMargins = UIEdgeInsetsMake(8, 8, 8, 8);
     }
     return self;
+}
+- (void)updateAvailableSize:(CGSize)size {
+    _availableSize = size;
+    RBBrushSize panel = RBBrushSizeForHost(size.width, size.height);
+    CGSize preferred = CGSizeMake(panel.width, panel.height);
+    if (!CGSizeEqualToSize(preferred, self.preferredContentSize)) self.preferredContentSize = preferred;
+    CGSize pickerSize = CGSizeMake(MIN(320, MAX(0, size.width - 24)), MIN(420, MAX(0, size.height - 24)));
+    if (_picker && !CGSizeEqualToSize(pickerSize, _picker.preferredContentSize)) _picker.preferredContentSize = pickerSize;
+}
+- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller {
+    return UIModalPresentationNone;
+}
+- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller
+    traitCollection:(UITraitCollection *)traits {
+    return UIModalPresentationNone;
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.secondarySystemBackgroundColor;
-    _heading = [[UILabel alloc] initWithFrame:CGRectZero];
-    _heading.text = @"画笔";
-    _heading.textColor = UIColor.labelColor;
-    _heading.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
-    _heading.adjustsFontForContentSizeCategory = YES;
-    [self.view addSubview:_heading];
-    _done = [[RBChromeButton alloc] initWithFrame:CGRectZero];
-    [_done setTitle:@"完成" forState:UIControlStateNormal];
-    [_done setTitleColor:UIColor.labelColor forState:UIControlStateNormal];
-    _done.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-    _done.titleLabel.adjustsFontSizeToFitWidth = YES;
-    _done.titleLabel.minimumScaleFactor = 0.5;
-    [_done addTarget:self action:@selector(done:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:_done];
+    _close = [[RBChromeButton alloc] initWithFrame:CGRectZero];
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightSemibold];
+    [_close setImage:[UIImage systemImageNamed:@"xmark" withConfiguration:config] forState:UIControlStateNormal];
+    _close.accessibilityLabel = _close.largeContentTitle = @"关闭画笔设置";
+    [_close addTarget:self action:@selector(close:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_close];
     _scroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
     _scroll.delaysContentTouches = NO;
-    _scroll.alwaysBounceVertical = NO;
     _scroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     [self.view addSubview:_scroll];
-    _colorHeading = [[UILabel alloc] initWithFrame:CGRectZero];
-    _colorHeading.text = @"颜色";
-    _colorHeading.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-    _colorHeading.textColor = UIColor.secondaryLabelColor;
-    _colorHeading.adjustsFontForContentSizeCategory = YES;
-    [_scroll addSubview:_colorHeading];
-    NSMutableArray *buttons = [NSMutableArray array], *checks = [NSMutableArray array];
-    NSArray *names = @[@"黑色", @"红色", @"蓝色", @"绿色"];
-    for (NSUInteger i = 0; i < _colors.count; i++) {
+    NSMutableArray *buttons = [NSMutableArray array];
+    for (NSUInteger i = 0; i < RBBrushColorCount; i++) {
         UIButton *button = [[RBChromeButton alloc] initWithFrame:CGRectZero];
-        [button setTitle:names[i] forState:UIControlStateNormal];
-        [button setTitleColor:UIColor.labelColor forState:UIControlStateNormal];
-        button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-        button.titleLabel.adjustsFontForContentSizeCategory = YES;
-        button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-        button.contentEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 8);
-        button.titleEdgeInsets = UIEdgeInsetsMake(0, 10, 0, 0);
-        button.accessibilityLabel = button.largeContentTitle = names[i];
+        button.accessibilityLabel = button.largeContentTitle = [NSString stringWithFormat:@"颜色 %lu", (unsigned long)i + 1];
+        button.accessibilityHint = @"轻点使用，选中后再次轻点调色";
         button.tag = i;
         [button addTarget:self action:@selector(pick:) forControlEvents:UIControlEventTouchUpInside];
-        UILabel *check = [[UILabel alloc] initWithFrame:CGRectZero];
-        check.text = @"✓";
-        check.textColor = UIColor.labelColor;
-        check.isAccessibilityElement = NO;
-        [button addSubview:check];
-        [checks addObject:check];
         [buttons addObject:button];
         [_scroll addSubview:button];
     }
-    _buttons = buttons; _checks = checks;
-    _more = [[RBChromeButton alloc] initWithFrame:CGRectZero];
-    [_more setTitle:@"更多颜色" forState:UIControlStateNormal];
-    [_more setTitleColor:UIColor.labelColor forState:UIControlStateNormal];
-    _more.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-    _more.titleLabel.adjustsFontForContentSizeCategory = YES;
-    _more.titleLabel.adjustsFontSizeToFitWidth = YES;
-    _more.titleLabel.minimumScaleFactor = 0.7;
-    [_more addTarget:self action:@selector(more:) forControlEvents:UIControlEventTouchUpInside];
-    [_scroll addSubview:_more];
+    _buttons = buttons;
     [self addChildViewController:_widthController];
     [_scroll addSubview:_widthController.view];
     [_widthController didMoveToParentViewController:self];
@@ -102,24 +96,17 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat width = self.view.bounds.size.width;
-    CGFloat header = MAX(52, _heading.font.lineHeight + 20);
-    CGFloat row = MAX(44, _buttons.firstObject.titleLabel.font.lineHeight + 16);
-    _heading.frame = CGRectMake(16, 0, width - 88, header);
-    _done.frame = CGRectMake(width - 68, 4, 60, header - 8);
-    _scroll.frame = CGRectMake(0, header, width, MAX(0, self.view.bounds.size.height - header));
-    CGFloat colorHeadingHeight = MAX(28, _colorHeading.font.lineHeight + 4);
-    _colorHeading.frame = CGRectMake(20, 8, width - 40, colorHeadingHeight);
-    CGFloat y = colorHeadingHeight + 12;
-    for (NSUInteger i = 0; i < _buttons.count; i++) {
-        _buttons[i].frame = CGRectMake(12, y, width - 24, row);
-        _checks[i].frame = CGRectMake(width - 60, 0, 24, row);
-        y += row + 8;
+    _close.frame = CGRectMake((width - RBBrushClose) / 2, 0, RBBrushClose, RBBrushClose);
+    _scroll.frame = CGRectMake(0, RBBrushClose, width, MAX(0, self.view.bounds.size.height - RBBrushClose));
+    CGFloat y = 8;
+    for (UIButton *button in _buttons) {
+        button.frame = CGRectMake((width - RBBrushColorTarget) / 2, y, RBBrushColorTarget, RBBrushColorTarget);
+        y += RBBrushColorTarget + RBBrushColorGap;
     }
-    _more.frame = CGRectMake(12, y, width - 24, row);
-    y += row + 12;
+    y += 8 - RBBrushColorGap;
     CGFloat height = _widthController.preferredContentSize.height;
-    _widthController.view.frame = CGRectMake(20, y, width - 40, height);
-    _scroll.contentSize = CGSizeMake(width, y + height + 12);
+    _widthController.view.frame = CGRectMake(0, y, width, height);
+    _scroll.contentSize = CGSizeMake(width, y + height + 8);
 }
 - (void)preferredContentSizeDidChangeForChildContentContainer:(id<UIContentContainer>)container {
     [super preferredContentSizeDidChangeForChildContentContainer:container];
@@ -136,50 +123,88 @@
 }
 - (void)updateColors {
     for (NSUInteger i = 0; i < _buttons.count; i++) {
-        BOOL selected = [self matchesColor:_colors[i]];
-        _checks[i].hidden = !selected;
+        BOOL selected = _selectedSlot == (NSInteger)i;
         _buttons[i].accessibilityTraits = UIAccessibilityTraitButton | (selected ? UIAccessibilityTraitSelected : 0);
-        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(28, 28)];
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(36, 36)];
         UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
             CGContextSetFillColorWithColor(context.CGContext,
                 [self->_colors[i] resolvedColorWithTraitCollection:self.traitCollection].CGColor);
-            CGContextFillEllipseInRect(context.CGContext, CGRectMake(2, 2, 24, 24));
+            CGContextFillEllipseInRect(context.CGContext, CGRectMake(5, 5, 26, 26));
             CGContextSetStrokeColorWithColor(context.CGContext,
                 [UIColor.labelColor resolvedColorWithTraitCollection:self.traitCollection].CGColor);
-            CGContextStrokeEllipseInRect(context.CGContext, CGRectMake(2, 2, 24, 24));
+            CGContextSetLineWidth(context.CGContext, 0.75);
+            CGContextStrokeEllipseInRect(context.CGContext, CGRectMake(5, 5, 26, 26));
+            if (selected) {
+                CGContextSetLineWidth(context.CGContext, 1.5);
+                CGContextStrokeEllipseInRect(context.CGContext, CGRectMake(1, 1, 34, 34));
+            }
         }];
         [_buttons[i] setImage:[image imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
     }
 }
+- (void)commitColor {
+    if (!_colorDirty || _selectedSlot < 0) return;
+    CGFloat r, g, b, a;
+    UIColor *resolved = [_color resolvedColorWithTraitCollection:self.traitCollection];
+    if (![resolved getRed:&r green:&g blue:&b alpha:&a]) return;
+    _colorDirty = NO;
+    RBSaveBrushColor((NSUInteger)_selectedSlot, @[@(r), @(g), @(b), @(a)]);
+}
 - (void)pick:(UIButton *)sender {
+    if (RBBrushTapEdits(_selectedSlot, sender.tag)) {
+        [self editColor:sender];
+        return;
+    }
+    _selectedSlot = sender.tag;
     _color = _colors[sender.tag];
+    _colorDirty = YES;
     [self updateColors];
     if (_colorChange) _colorChange(_color);
+    [self commitColor];
 }
-- (void)more:(UIButton *)sender {
+- (void)editColor:(UIButton *)sender {
+    if (_picker) return;
     [_widthController commitPendingWidth];
-    UIColorPickerViewController *picker = [UIColorPickerViewController new];
-    picker.selectedColor = _color;
-    picker.supportsAlpha = NO;
-    picker.delegate = self;
-    picker.modalPresentationStyle = UIModalPresentationPopover;
-    picker.preferredContentSize = CGSizeMake(320, 420);
-    picker.popoverPresentationController.sourceView = sender;
-    picker.popoverPresentationController.sourceRect = sender.bounds;
-    picker.popoverPresentationController.passthroughViews = @[];
-    [self presentViewController:picker animated:YES completion:nil];
+    _picker = [UIColorPickerViewController new];
+    _picker.selectedColor = _color;
+    _picker.supportsAlpha = NO;
+    _picker.delegate = self;
+    _picker.modalPresentationStyle = UIModalPresentationPopover;
+    _picker.popoverPresentationController.delegate = self;
+    _picker.popoverPresentationController.sourceView = sender;
+    _picker.popoverPresentationController.sourceRect = sender.bounds;
+    _picker.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    _picker.popoverPresentationController.passthroughViews = @[];
+    _picker.popoverPresentationController.popoverLayoutMargins = UIEdgeInsetsMake(8, 8, 8, 8);
+    [self updateAvailableSize:_availableSize];
+    [self presentViewController:_picker animated:YES completion:nil];
 }
 - (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)picker {
     _color = picker.selectedColor;
+    _colors[_selectedSlot] = _color;
+    _colorDirty = YES;
     [self updateColors];
     if (_colorChange) _colorChange(_color);
 }
 - (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)picker {
-    [picker dismissViewControllerAnimated:YES completion:nil];
+    [picker dismissViewControllerAnimated:YES completion:^{
+        [self commitColor];
+        if (self->_picker == picker) self->_picker = nil;
+    }];
 }
-- (void)done:(UIButton *)sender {
+- (void)presentationControllerDidDismiss:(UIPresentationController *)controller {
+    [self commitColor];
+    [_widthController commitPendingWidth];
+    if (controller.presentedViewController == _picker) _picker = nil;
+}
+- (void)close:(UIButton *)sender {
+    [self commitColor];
     [_widthController commitPendingWidth];
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+- (void)viewWillDisappear:(BOOL)animated {
+    [self commitColor];
+    [super viewWillDisappear:animated];
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {
     [super traitCollectionDidChange:previous];

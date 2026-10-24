@@ -17,6 +17,9 @@ BOOL RBStoreSetting(NSString *key, id value);
 void RBStartSettingsService(void);
 RBToolbarPosition RBToolbarPositionForApp(NSString *bundleID);
 BOOL RBSaveToolbarPosition(NSString *bundleID, RBToolbarPosition position);
+NSArray<NSNumber *> *RBBrushColorForSlot(NSUInteger slot);
+NSInteger RBSelectedBrushSlot(void);
+BOOL RBSaveBrushColor(NSUInteger slot, NSArray<NSNumber *> *components);
 
 static inline HBPreferences *RBPreferences(void) {
     static HBPreferences *preferences;

@@ -20,6 +20,40 @@ static BOOL RBDecodeToolbarPosition(id value, RBToolbarPosition *position) {
     return YES;
 }
 
+static BOOL RBValidBrushColor(id slot, id components) {
+    if (![slot isKindOfClass:NSNumber.class] || [slot doubleValue] < 0 || [slot doubleValue] > 3 ||
+        !isfinite([slot doubleValue]) || round([slot doubleValue]) != [slot doubleValue] ||
+        ![components isKindOfClass:NSArray.class] || [components count] != 4) return NO;
+    for (id component in components) {
+        if (![component isKindOfClass:NSNumber.class] || !isfinite([component doubleValue]) ||
+            [component doubleValue] < 0 || [component doubleValue] > 1) return NO;
+    }
+    return YES;
+}
+
+static BOOL RBMergeBrushColor(NSNumber *slot, NSArray *components) {
+    @try {
+        id stored = [RBPreferences() objectForKey:@"brushColors"];
+        NSMutableDictionary *colors = [NSMutableDictionary dictionary];
+        // Only four validated slots are ever exposed; malformed legacy data is ignored.
+        for (NSUInteger i = 0; i < 4; i++) {
+            NSString *key = [@(i) stringValue];
+            id value = [stored isKindOfClass:NSDictionary.class] ? stored[key] : nil;
+            if (RBValidBrushColor(@(i), value)) colors[key] = value;
+        }
+        colors[slot.stringValue] = components;
+        [RBPreferences() setObject:colors forKey:@"brushColors"];
+        NSArray *keys = @[@"cR", @"cG", @"cB", @"cA"];
+        for (NSUInteger i = 0; i < 4; i++) [RBPreferences() setObject:components[i] forKey:keys[i]];
+        [RBPreferences() setObject:@YES forKey:@"hasCustom"];
+        [RBPreferences() setObject:slot forKey:@"brushSelectedSlot"];
+        return RBSignalSettingsChanged();
+    } @catch (NSException *exception) {
+        RBDiagnostic(@"settings.palette", [NSString stringWithFormat:@"saved=0 exception=%@", exception.name]);
+        return NO;
+    }
+}
+
 // SpringBoard is the only writer of this dictionary, including for system apps.
 static BOOL RBMergeToolbarPosition(NSString *bundleID, NSDictionary *position) {
     @try {
@@ -78,6 +112,8 @@ static NSDictionary *RBHandleSettingsRequest(NSDictionary *request) {
         if (!RBDecodeToolbarPosition(position, NULL)) return nil;
         return @{@"saved": @(RBMergeToolbarPosition(request[@"bundle"], position))};
     }
+    if ([operation isEqual:@"brushColor"] && request.count == 4 && RBValidBrushColor(request[@"slot"], request[@"rgba"]))
+        return @{@"saved": @(RBMergeBrushColor(request[@"slot"], request[@"rgba"]))};
     BOOL remove = [operation isEqual:@"remove"];
     if ((remove || [operation isEqual:@"write"]) && request.count == (remove ? 3 : 4) &&
         RBWritableDrawingKey(request[@"key"], request[@"value"]) && (remove || request[@"value"])) {
@@ -171,6 +207,45 @@ static NSMutableArray *gSettingsObservers;
 static BOOL gRefreshPending;
 static BOOL gRefreshAgain;
 static NSMutableDictionary *gToolbarPositions;
+
+NSArray<NSNumber *> *RBBrushColorForSlot(NSUInteger slot) {
+    if (slot >= 4) return nil;
+    id stored = RBSnapshotValue(@"brushColors");
+    id value = [stored isKindOfClass:NSDictionary.class] ? stored[[@(slot) stringValue]] : nil;
+    return RBValidBrushColor(@(slot), value) ? value : nil;
+}
+
+NSInteger RBSelectedBrushSlot(void) {
+    id slot = RBSnapshotValue(@"brushSelectedSlot");
+    return RBValidBrushColor(slot, @[@0,@0,@0,@1]) ? [slot integerValue] : -1;
+}
+
+BOOL RBSaveBrushColor(NSUInteger slot, NSArray<NSNumber *> *components) {
+    if (!RBValidBrushColor(@(slot), components)) return NO;
+    components = [components copy];
+    if ([NSBundle.mainBundle.bundleIdentifier isEqual:@"com.apple.springboard"])
+        return RBMergeBrushColor(@(slot), components);
+    if (RBSandboxPreferences()) {
+        NSMutableDictionary *updated = [gSnapshot mutableCopy] ?: [NSMutableDictionary dictionary];
+        id stored = updated[@"brushColors"];
+        NSMutableDictionary *colors = [stored isKindOfClass:NSDictionary.class] ? [stored mutableCopy] : [NSMutableDictionary dictionary];
+        colors[[@(slot) stringValue]] = components;
+        updated[@"brushColors"] = colors;
+        updated[@"brushSelectedSlot"] = @(slot);
+        updated[@"hasCustom"] = @YES;
+        NSArray *keys = @[@"cR", @"cG", @"cB", @"cA"];
+        for (NSUInteger i = 0; i < 4; i++) updated[keys[i]] = components[i];
+        gSnapshot = updated;
+    }
+    dispatch_async(RBSettingsQueue(), ^{
+        NSDictionary *request = @{@"domain": RB_SETTINGS_DOMAIN, @"operation": @"brushColor",
+            @"slot": @(slot), @"rgba": components};
+        BOOL saved = [RBBridgeRequest(request)[@"saved"] boolValue];
+        RBDiagnostic(@"settings.palette", saved ? @"saved=1" : @"saved=0");
+        dispatch_async(dispatch_get_main_queue(), ^{ RBRefreshSettings(); });
+    });
+    return YES;
+}
 
 RBToolbarPosition RBToolbarPositionForApp(NSString *bundleID) {
     RBToolbarPosition position = RBToolbarDefaultPosition();

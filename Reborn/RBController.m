@@ -127,6 +127,10 @@
         CGFloat position = i * (RBToolbarButton + RBToolbarGap);
         _barButtons[i].frame = CGRectMake(RBToolbarPadding, position, RBToolbarButton, RBToolbarButton);
     }
+    if ([self.presentedViewController isKindOfClass:RBBrushPopover.class]) {
+        [(RBBrushPopover *)self.presentedViewController updateAvailableSize:
+            UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets).size];
+    }
 }
 
 - (void)placeToolbarAt:(CGPoint)origin {
@@ -311,7 +315,6 @@
         width:_drawView.lineWidth colorChange:^(UIColor *color) {
             __strong typeof(weakSelf) controller = weakSelf;
             if (!controller) return;
-            [RBPrefs setCustomColor:color];
             controller->_drawView.lineColor = color;
         } widthChange:^(CGFloat width) {
             __strong typeof(weakSelf) controller = weakSelf;
@@ -323,6 +326,7 @@
     popover.popoverPresentationController.sourceRect = sender.bounds;
     popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
     popover.popoverPresentationController.passthroughViews = @[];
+    [popover updateAvailableSize:UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets).size];
     [self presentViewController:popover animated:YES completion:nil];
 }
 

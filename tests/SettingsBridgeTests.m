@@ -73,6 +73,8 @@ int main(int argc, const char *argv[]) {
                 assert(position.x == 0.2 && position.y == 0.8);
                 position = RBToolbarPositionForApp(@"test.other");
                 assert(position.x == 0.7 && position.y == 0.3);
+                assert(([RBBrushColorForSlot(0) isEqual:@[@0.1,@0.2,@0.3,@1]]));
+                assert(([RBBrushColorForSlot(1) isEqual:@[@0.8,@0.4,@0.1,@1]]));
                 return 0;
             }
             [RBPreferences() setObject:@[@"tv.danmaku.bilianime"] forKey:@"enabledApps"];
@@ -110,6 +112,12 @@ int main(int argc, const char *argv[]) {
         assert(!RBHandleSettingsRequest(@{@"domain": gTestDomain, @"operation": @7}));
         assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"write",
             @"key": @"toolbarPositions", @"value": @{}}));
+        assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"write",
+            @"key": @"brushColors", @"value": @{}}));
+        assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"brushColor", @"slot":@4,
+            @"rgba":@[@0,@0,@0,@1]}));
+        assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"brushColor", @"slot":@0,
+            @"rgba":@[@0,@2,@0,@1]}));
         assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"toolbarPosition",
             @"bundle": @"test.reader", @"x": @1.1, @"y": @0.2}));
         assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"toolbarPosition",
@@ -129,6 +137,17 @@ int main(int argc, const char *argv[]) {
             return [RBBridgeRequest(Request(@"read"))[@"values"][@"colorIndex"] isEqual:@5];
         });
         assert(!RBWriteSetting(@"enabled", @NO));
+        assert(RBSaveBrushColor(0, @[@0.1,@0.2,@0.3,@1]));
+        assert(RBSaveBrushColor(1, @[@0.8,@0.4,@0.1,@1]));
+        assert(([RBBrushColorForSlot(0) isEqual:@[@0.1,@0.2,@0.3,@1]]));
+        assert(RBSelectedBrushSlot() == 1);
+        PumpUntil(^BOOL {
+            NSDictionary *values = RBBridgeRequest(Request(@"read"))[@"values"];
+            return [values[@"brushColors"][@"1"] isEqual:@[@0.8,@0.4,@0.1,@1]] && [values[@"cR"] isEqual:@0.8];
+        });
+        assert([RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"brushColor", @"slot":@2,
+            @"rgba":@[@0.5,@0.6,@0.7,@1]})[@"saved"] boolValue]);
+        assert([RBBridgeRequest(Request(@"read"))[@"values"][@"brushColors"] count] == 3);
         assert(RBWriteSetting(@"strokeWidth", @17));
         PumpUntil(^BOOL {
             return [RBBridgeRequest(Request(@"read"))[@"values"][@"strokeWidth"] isEqual:@17];
@@ -160,6 +179,7 @@ int main(int argc, const char *argv[]) {
         server = StartServer(@"--server");
         positions = RBBridgeRequest(Request(@"read"))[@"values"][@"toolbarPositions"];
         assert(positions.count == 4); // SpringBoard/server restart retains all apps.
+        assert([RBBridgeRequest(Request(@"read"))[@"values"][@"brushColors"] count] == 3);
 
         // Healthy Cephei takes precedence, including a successfully empty configuration.
         gCepheiHealthy = YES;

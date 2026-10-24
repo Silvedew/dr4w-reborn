@@ -71,12 +71,18 @@ they do not establish real App Store sandbox/IPC behavior.
     temporary hiding and idle fade timing still behave as before.
 15. Increase text size in Settings, reopen App Enable, and verify duplicate app
     identifiers remain legible, row heights grow, and switches stay operable.
-16. Tap Pencil between Clear and Close. Verify four common colors are vertical,
-    the active color is checked, and selecting a color leaves the panel open.
-    More Colors opens the native picker and returns to this same panel. Drag the
+16. Tap Pencil between Clear and Close. Verify the approximately 80-point wide
+    panel uses a single centered column: four unlabeled color circles, a ring on
+    the selected slot, the width heading and upright number, and a close icon.
+    There must be no panel/color title or More Colors button. Tap an unselected
+    color to use it, then tap it again to edit. Native-picker changes must preview
+    immediately and persist on closing, replacing that slot across apps, app
+    restarts and respring. Duplicate slot colors must still select only one slot.
+    Narrow Split View must keep both panels as popovers inside the app; shrinking
+    height scrolls content without widening or turning it into a large sheet. Drag the
     vertical slider up/down from 1 to 30: the upright thumb number, line preview
     and next drawn stroke must match. The parent panel must not scroll during a
-    slider gesture; scrolling blank space must still reveal all controls. Done or
+    slider gesture; scrolling blank space must still reveal all controls. Close or
     an outside tap closes the panel without drawing a dot. Close the popover or
     lift the finger; reopening the app must retain the width. Repeat
     with VoiceOver's one-point increments and dismissal. An upgrade must preserve

@@ -89,10 +89,14 @@ respring, rotation and Split View resizing. Apps without a saved position start
 at the right-hand center. Short windows scroll the five action buttons below the fixed handle. VoiceOver users
 can move the handle through its four directional custom actions.
 
-The Pencil button opens one vertical panel with four common colors, More Colors,
-and a numbered vertical 1–30 pt slider with a live line preview. Up means thicker.
-Selections leave the panel open; tap Done or outside to close. The system color
-picker returns to this panel. Width changes apply immediately; persistence occurs
+The Pencil button opens an 80 pt wide vertical panel with four icon-only color
+slots and a numbered vertical 1–30 pt slider with a live line preview. Up means
+thicker. Tap a color to use it; tap the selected slot again to edit it in the
+system picker. Edits preview immediately and save on picker dismissal, replacing
+that slot for all apps. There is no More Colors button. Selections leave the
+panel open; tap the centered close icon or outside to close. The system picker
+returns to this panel. Split View keeps both presentations as bounded popovers
+rather than adapting them into a large sheet. Width changes apply immediately; persistence occurs
 on release or dismissal. Legacy five-step width choices are retained until a new
 width is selected. Toolbar positions are merged by SpringBoard per app only at
 gesture end; generic bridge writes cannot replace the position dictionary.

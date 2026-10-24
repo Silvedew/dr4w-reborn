@@ -28,6 +28,8 @@ jobs:
           /tmp/rb-toolbar-tests
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/stroke_width_test.c -o /tmp/rb-width-tests
           /tmp/rb-width-tests
+          clang -std=c11 -Wall -Wextra -Werror -IShared tests/brush_layout_test.c -o /tmp/rb-brush-tests
+          /tmp/rb-brush-tests
           clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m tests/FakeHBPreferences.m -o /tmp/rb-settings-tests
           /tmp/rb-settings-tests
           clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/PreferencesControllerTests.m tests/FakeHBPreferences.m -o /tmp/rb-controller-tests

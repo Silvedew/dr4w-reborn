@@ -221,16 +221,26 @@ test('vertical stroke-width control updates locally and commits after interactio
   assert.match(source('Shared/RBSettingsStore.m'), /@"strokeWidth"/);
 });
 
-test('brush popover combines color and width without dismissing on selection', () => {
+test('compact brush popover uses centered icon slots and edits only the selected slot', () => {
   const brush = source('Reborn/RBBrushPopover.m');
-  const pick = brush.slice(brush.indexOf('- (void)pick:'), brush.indexOf('- (void)more:'));
+  const pick = brush.slice(brush.indexOf('- (void)pick:'), brush.indexOf('- (void)editColor:'));
   assert.match(pick, /_colorChange\(_color\)/);
   assert.doesNotMatch(pick, /dismissViewController/);
+  assert.match(pick, /RBBrushTapEdits\(_selectedSlot, sender.tag\)/);
   assert.match(brush, /addChildViewController:_widthController/);
   assert.match(brush, /_scroll.contentSize/);
-  assert.match(brush, /_checks\[i\].hidden = !selected/);
+  assert.match(brush, /BOOL selected = _selectedSlot == \(NSInteger\)i/);
+  assert.match(brush, /\(width - RBBrushColorTarget\) \/ 2/);
+  assert.doesNotMatch(brush, /setTitle:|更多颜色|_heading|_colorHeading/);
   assert.match(brush, /picker.popoverPresentationController.passthroughViews = @\[\]/);
+  assert.equal((brush.match(/return UIModalPresentationNone;/g) || []).length, 2);
+  assert.match(brush, /_picker.popoverPresentationController.delegate = self/);
+  assert.match(brush, /presentationControllerDidDismiss:[\s\S]*?\[self commitColor\]/);
+  const preview = brush.slice(brush.indexOf('- (void)colorPickerViewControllerDidSelectColor:'), brush.indexOf('- (void)colorPickerViewControllerDidFinish:'));
+  assert.doesNotMatch(preview, /RBSaveBrushColor|commitColor/);
   const controller = source('Reborn/RBController.m');
   assert.doesNotMatch(controller, /RBColorPaletteVC|showWidthsFromButton|colorTapped/);
+  assert.doesNotMatch(controller, /setCustomColor:color/);
+  assert.match(controller, /updateAvailableSize:/);
   assert.match(controller, /popover.popoverPresentationController.passthroughViews = @\[\]/);
 });

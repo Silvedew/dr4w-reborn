@@ -1,6 +1,10 @@
 # iPad Pro 2018 / iPadOS 15.1 regression checks
 
 Run after installing the new package and respringing, so the old dylib is unloaded.
+Confirm Cephei Tweak Support >= 2.0 is installed; fully close and reopen the test apps.
+Use one system app and at least two sandboxed third-party apps (for example,
+Quark HD and Eudic if installed). Native CI settings tests use a Cephei test double;
+they do not establish real App Store sandbox/IPC behavior.
 
 1. Open Settings -> 全局画板. Confirm the master, home-screen, and volume-shortcut
    switches are on; there is no separate floating-ball switch. Existing app
@@ -30,6 +34,17 @@ Run after installing the new package and respringing, so the old dylib is unload
 9. Repeatedly change Split View size, switch scenes, lock/unlock, and return to
    the enabled app. Its ball must be attached to the active scene, remain tappable,
    and not appear in a disabled app. Collect fresh logs if any of these fail.
+10. Verify an enabled third-party app logs `initialized` with `backend=Cephei`
+    and `enabled=1`, then `ball.shown`. A legacy-lifecycle app may report
+    `scenes=0` and `scene=legacy`; it must still show a tappable ball. After an
+    unlocked volume combo, verify its `toggle.received` has `allowed=1` and
+    `present.shown` follows. A background/disabled app must log `allowed=0`.
+11. Change app switches and drawing preferences across Settings, SpringBoard,
+    and a third-party app. Confirm changes arrive after cache refresh without a
+    respring, survive reopening, and preserve old enable choices and pen values.
+    If the app has no `loaded` entry, inspect injector/dyld logs; if it loads but
+    logs `enabled=0`, inspect shared configuration; if it is enabled but logs
+    `ball.skipped`, inspect the recorded foreground/scene reason.
 
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,

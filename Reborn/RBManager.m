@@ -5,6 +5,7 @@
 #import "RBPrefs.h"
 #import "RBSystemHooks.h"
 #import "RBSettings.h"
+#import "RBDiagnostics.h"
 #import <QuartzCore/QuartzCore.h>
 
 #import <notify.h>
@@ -53,6 +54,10 @@ CGRect RBHostBounds(void) {
         if ([s isKindOfClass:[UIWindowScene class]])
             return ((UIWindowScene *)s).coordinateSpace.bounds;
     }
+    for (UIWindow *window in [UIApplication sharedApplication].windows) {
+        if (!window.hidden && window.windowLevel == UIWindowLevelNormal && window.rootViewController)
+            return window.bounds;
+    }
     return [UIScreen mainScreen].bounds;
 }
 
@@ -80,7 +85,7 @@ CGRect RBHostBounds(void) {
         if (s.activationState == UISceneActivationStateForegroundActive) return (UIWindowScene *)s;
     }
     for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
-        if ([s isKindOfClass:[UIWindowScene class]]) return (UIWindowScene *)s;
+        if (RBIsSpringBoard() && [s isKindOfClass:[UIWindowScene class]]) return (UIWindowScene *)s;
     }
     return nil;
 }
@@ -91,18 +96,27 @@ CGRect RBHostBounds(void) {
 
 - (void)present {
     if ([self isShowing]) return;
-    if (!RBMayPresent()) return;
+    if (!RBMayPresent()) {
+        RBDiagnostic(@"present.skipped", @"policy-or-foreground");
+        return;
+    }
+    UIWindowScene *scene = [self activeScene];
+    if (!RBPolicyCanHostWindow(scene != nil, [UIApplication sharedApplication].connectedScenes.count)) {
+        RBDiagnostic(@"present.skipped", @"no-active-scene");
+        return;
+    }
 
     _previousKey = [UIApplication sharedApplication].keyWindow;
 
     RBWindow *w = [[RBWindow alloc] initWithFrame:RBHostBounds()];
-    w.windowScene = [self activeScene];
+    if (scene) w.windowScene = scene;
     w.windowLevel = UIWindowLevelAlert + 1000.0;
     w.backgroundColor = [UIColor clearColor];
     w.rootViewController = [[RBController alloc] init];
     w.hidden = NO;
     [w makeKeyAndVisible];
     _window = w;
+    RBDiagnostic(@"present.shown", scene ? @"scene=active" : @"scene=legacy");
     RBStartLayoutPolling();
 
     [[RBFloating shared] hide];
@@ -149,15 +163,26 @@ CGRect RBHostBounds(void) {
 
 __attribute__((constructor))
 static void RBBootstrap(void) {
-    if (!NSClassFromString(@"UIApplication")) return;
+    RBDiagnostic(@"loaded", @"awaiting-main-thread");
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
+        NSBundle *bundle = [NSBundle mainBundle];
+        if (![bundle.bundleURL.pathExtension.lowercaseString isEqualToString:@"app"] ||
+            !bundle.bundleIdentifier.length || bundle.infoDictionary[@"NSExtension"] ||
+            !NSClassFromString(@"UIApplication")) {
+            RBDiagnostic(@"initialize.skipped", @"not-a-UIKit-app");
+            return;
+        }
+        static dispatch_once_t once;
+        dispatch_once(&once, ^{
         RBReloadSettings();
         __block BOOL wasEnabled = RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]);
-        int settingsToken = 0;
-        notify_register_dispatch(RB_SETTINGS_CHANGED, &settingsToken, dispatch_get_main_queue(), ^(int t) {
-            RBReloadSettings();
+        RBDiagnostic(@"initialized", [NSString stringWithFormat:@"backend=Cephei enabled=%d keys=%lu state=%ld scenes=%lu",
+            wasEnabled, (unsigned long)RBPreferences().dictionaryRepresentation.count,
+            (long)[UIApplication sharedApplication].applicationState,
+            (unsigned long)[UIApplication sharedApplication].connectedScenes.count]);
+        RBObserveSettings(^{
             gVolumeSequence = (RBVolumeSequence){0};
             if (!RBMayPresent()) [[RBManager shared] dismiss];
             BOOL enabled = RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]);
@@ -165,13 +190,19 @@ static void RBBootstrap(void) {
                 [[RBFloating shared] restoreForForeground];
             else [[RBFloating shared] refreshVisibility];
             wasEnabled = enabled;
+            RBDiagnostic(@"settings.updated", [NSString stringWithFormat:@"enabled=%d", enabled]);
             RBStopLayoutPolling();
             if (RBMayPresent()) RBStartLayoutPolling();
         });
 
         int toggleToken = 0;
         notify_register_dispatch("com.dsh.dr4wreborn.toggle", &toggleToken, dispatch_get_main_queue(), ^(int t) {
-            if (RBMayPresent()) [[RBManager shared] toggle];
+            BOOL allowed = RBMayPresent();
+            RBDiagnostic(@"toggle.received", [NSString stringWithFormat:@"enabled=%d allowed=%d state=%ld scenes=%lu",
+                RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]), allowed,
+                (long)[UIApplication sharedApplication].applicationState,
+                (unsigned long)[UIApplication sharedApplication].connectedScenes.count]);
+            if (allowed) [[RBManager shared] toggle];
         });
 
         if (RBIsSpringBoard()) {
@@ -231,5 +262,6 @@ static void RBBootstrap(void) {
             [[RBFloating shared] refreshVisibility];
             RBStartLayoutPolling();
         }
+        });
     });
 }

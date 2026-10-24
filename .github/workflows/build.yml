@@ -24,11 +24,11 @@ jobs:
         run: |
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/policy_test.c -o /tmp/rb-policy-tests
           /tmp/rb-policy-tests
-          clang -fobjc-arc -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m -o /tmp/rb-settings-tests
+          clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m tests/FakeHBPreferences.m -o /tmp/rb-settings-tests
           /tmp/rb-settings-tests
-          clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/PreferencesControllerTests.m -o /tmp/rb-controller-tests
+          clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/PreferencesControllerTests.m tests/FakeHBPreferences.m -o /tmp/rb-controller-tests
           /tmp/rb-controller-tests
-          plutil -lint Preferences/Info.plist Preferences/Dr4wReborn.plist
+          plutil -lint Dr4wReborn.plist Preferences/Info.plist Preferences/Dr4wReborn.plist
 
       - name: Render and verify Settings icons
         run: swift scripts/generate-settings-icons.swift settings-icons
@@ -36,15 +36,22 @@ jobs:
       - name: Show SDK
         run: xcrun --sdk iphoneos --show-sdk-path
 
+      - name: Download pinned official Cephei 2.0 SDK
+        run: |
+          mkdir -p .deps/cephei
+          curl --fail --location --retry 3 https://github.com/hbang/libcephei/releases/download/2.0/cephei_sdk_2.0.zip -o .deps/cephei/sdk.zip
+          echo '665758f996b333e8e58594af9950fc8e3ffe7c3c4078f49f66cadeaa162ef154  .deps/cephei/sdk.zip' | shasum -a 256 --check
+          unzip -q .deps/cephei/sdk.zip -d .deps/cephei
+
       - name: Compile dylib (arm64 + arm64e)
         run: |
           set -euxo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           SRCS=$(find Engine Reborn -name '*.m')
           echo "$SRCS"
-          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IEngine -IReborn -IShared -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore"
-          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0  $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64.dylib
-          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64e.dylib
+          COMMON=(-isysroot "$SDK" -miphoneos-version-min=15.0 -fobjc-arc -O2 -IEngine -IReborn -IShared -F "$PWD/.deps/cephei/cephei_sdk_2.0" -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore -framework Cephei -Wl,-rpath,/var/jb/Library/Frameworks "-DRB_BUILD_VERSION=\"0.1.${GITHUB_RUN_NUMBER}\"")
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 "${COMMON[@]}" -dynamiclib $SRCS -o Dr4wReborn-arm64.dylib
+          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 "${COMMON[@]}" -dynamiclib $SRCS -o Dr4wReborn-arm64e.dylib
           lipo -create Dr4wReborn-arm64.dylib Dr4wReborn-arm64e.dylib -output Dr4wReborn.dylib
           lipo -info Dr4wReborn.dylib
 
@@ -52,10 +59,18 @@ jobs:
         run: |
           set -euxo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IShared -framework Foundation -framework UIKit -framework MobileCoreServices -dynamiclib -undefined dynamic_lookup -install_name /var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle/Dr4wRebornPrefs"
-          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 $COMMON Preferences/RBRootListController.m -o Prefs-arm64
-          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 $COMMON Preferences/RBRootListController.m -o Prefs-arm64e
+          COMMON=(-isysroot "$SDK" -miphoneos-version-min=15.0 -fobjc-arc -O2 -IShared -F "$PWD/.deps/cephei/cephei_sdk_2.0" -framework Foundation -framework UIKit -framework MobileCoreServices -framework Cephei -Wl,-rpath,/var/jb/Library/Frameworks -dynamiclib -undefined dynamic_lookup -install_name /var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle/Dr4wRebornPrefs)
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 "${COMMON[@]}" Preferences/RBRootListController.m -o Prefs-arm64
+          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 "${COMMON[@]}" Preferences/RBRootListController.m -o Prefs-arm64e
           lipo -create Prefs-arm64 Prefs-arm64e -output Dr4wRebornPrefs
+
+      - name: Verify Cephei dependencies and rootless search paths
+        run: |
+          set -euxo pipefail
+          for binary in Dr4wReborn-arm64.dylib Dr4wReborn-arm64e.dylib Prefs-arm64 Prefs-arm64e; do
+            otool -L "$binary" | grep -F '@rpath/Cephei.framework/Cephei'
+            otool -l "$binary" | grep -F 'path /var/jb/Library/Frameworks'
+          done
 
       - name: Package deb
         run: |
@@ -102,7 +117,7 @@ jobs:
           REPO_NAME=${GITHUB_REPOSITORY##*/}
           BASE="https://${OWNER}.github.io/${REPO_NAME}"
 
-          printf 'Package: com.dsh.dr4wreborn\nName: 全局画板\nVersion: %s\nArchitecture: iphoneos-arm64\nDescription: 全局画板 —— 任意界面手绘标注，开源可改\nMaintainer: dsh\nAuthor: dsh\nSection: Tweaks\nDepends: mobilesubstrate | ellekit, preferenceloader\nFilename: %s/%s\nSize: %s\nMD5sum: %s\nSHA256: %s\n\n' \
+          printf 'Package: com.dsh.dr4wreborn\nName: 全局画板\nVersion: %s\nArchitecture: iphoneos-arm64\nDescription: 全局画板 —— 任意界面手绘标注，开源可改\nMaintainer: dsh\nAuthor: dsh\nSection: Tweaks\nDepends: mobilesubstrate | ellekit, preferenceloader, ws.hbang.common (>= 2.0)\nFilename: %s/%s\nSize: %s\nMD5sum: %s\nSHA256: %s\n\n' \
             "${VERSION}" "${BASE}" "${DEB}" "${SIZE}" "${MD5}" "${SHA}" > site/Packages
           gzip -c site/Packages > site/Packages.gz
 

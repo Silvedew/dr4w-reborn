@@ -3,6 +3,11 @@
 #include <stdio.h>
 
 int main(void) {
+    assert(RBPolicyCanHostWindow(false, 0)); // Legacy UIApplication lifecycle.
+    assert(RBPolicyCanHostWindow(true, 1));
+    assert(RBPolicyCanHostWindow(true, 2));
+    assert(!RBPolicyCanHostWindow(false, 1)); // Modern app with no active scene.
+    assert(!RBPolicyCanHostWindow(false, 2));
     for (int master = 0; master < 2; master++) {
         for (int home = 0; home < 2; home++) {
             for (int selected = 0; selected < 2; selected++) {

@@ -3,6 +3,7 @@
 #import "RBPrefs.h"
 #import "RBPolicy.h"
 #import "RBIconStyle.h"
+#import "RBDiagnostics.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -46,7 +47,10 @@
 
 - (void)buildIfNeeded {
     UIWindowScene *scene = [self activeScene];
-    if (!scene) return;
+    if (!RBPolicyCanHostWindow(scene != nil, [UIApplication sharedApplication].connectedScenes.count)) {
+        RBDiagnostic(@"ball.skipped", @"no-active-scene");
+        return;
+    }
     if (_win && _win.windowScene == scene) return;
     _win.hidden = YES;
     _win.rootViewController = nil;
@@ -58,7 +62,7 @@
     _win = [[UIWindow alloc] initWithFrame:[self clamped:CGRectMake(c.x - size / 2.0,
                                                                     c.y - size / 2.0,
                                                                     size, size)]];
-    _win.windowScene = scene;
+    if (scene) _win.windowScene = scene;
     _win.windowLevel = UIWindowLevelAlert + 900.0;
     _win.backgroundColor = [UIColor clearColor];
 
@@ -117,14 +121,21 @@
     if (RBIsSpringBoard()) { _win.hidden = YES; return; }
     if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive) {
         _win.hidden = YES;
+        RBDiagnostic(@"ball.skipped", @"not-foreground");
         return;
     }
     if ([[RBManager shared] isShowing]) { _win.hidden = YES; return; }
-    if (!RBPolicyBall(![self disabledHere], _userHidden)) { _win.hidden = YES; return; }
+    if (!RBPolicyBall(![self disabledHere], _userHidden)) {
+        _win.hidden = YES;
+        RBDiagnostic(@"ball.skipped", [self disabledHere] ? @"app-disabled" : @"temporarily-hidden");
+        return;
+    }
     @try {
         [self buildIfNeeded];
+        if (!_win) return;
         _win.hidden = NO;
         [self applyPrefs];
+        RBDiagnostic(@"ball.shown", _win.windowScene ? @"scene=active" : @"scene=legacy");
     } @catch (NSException *e) {
         NSLog(@"[Dr4wReborn] ball show failed: %@", e);
     }

@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <math.h>
 
 static inline bool RBPolicyEnabled(bool master, bool home, bool selected, bool isHome) {
@@ -8,6 +9,10 @@ static inline bool RBPolicyEnabled(bool master, bool home, bool selected, bool i
 
 static inline bool RBPolicyBall(bool enabled, bool temporarilyHidden) {
     return enabled && !temporarilyHidden;
+}
+
+static inline bool RBPolicyCanHostWindow(bool hasActiveScene, size_t connectedScenes) {
+    return hasActiveScene || connectedScenes == 0;
 }
 
 typedef struct {

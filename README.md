@@ -49,6 +49,8 @@ control                 deb metadata
 - Locking closes the drawing panel; SpringBoard observes volume button methods
   instead of polling audio or frontmost-app interfaces. Normal volume behavior is preserved.
 - Preferences persist between launches
+- Shared preferences use Cephei 2.0 (`HBPreferences`) so sandboxed App Store apps
+  read the same enable list and drawing settings as Settings and SpringBoard.
 
 ## Install
 
@@ -62,7 +64,16 @@ control                 deb metadata
    Long-press temporarily hides it; leaving and re-entering the app restores it.
 
 After upgrading, respring before testing so SpringBoard unloads the old dylib.
+This rootless package also requires **Cephei Tweak Support 2.0 or later**
+(`ws.hbang.common`), available from [Chariz](https://chariz.com/get/cephei).
+Install through Sileo so dependencies are resolved, then fully close and reopen
+the enabled third-party apps. Existing settings are kept in the same preference domain.
 Device stability checks are listed in [tests/IPAD-SMOKE-TEST.md](tests/IPAD-SMOKE-TEST.md).
+
+Diagnostic system-log entries start with `[Dr4wReborn <version>]`. They record
+`loaded`, `initialized` (Cephei backend, enabled state, scene count),
+`toggle.received`, and `ball.shown`/`ball.skipped`. They do not include drawing
+content. A process without `UIScene` uses its legacy application window instead.
 
 ## Where to change things
 

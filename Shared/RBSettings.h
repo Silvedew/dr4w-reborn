@@ -1,6 +1,6 @@
 #pragma once
 #import <Foundation/Foundation.h>
-#import <CoreFoundation/CoreFoundation.h>
+#import <Cephei/HBPreferences.h>
 #import <notify.h>
 #import "RBPolicy.h"
 
@@ -9,10 +9,15 @@
 #endif
 #define RB_SETTINGS_CHANGED "com.dsh.dr4wreborn.settingschanged"
 
+static inline HBPreferences *RBPreferences(void) {
+    static HBPreferences *preferences;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ preferences = [HBPreferences preferencesForIdentifier:RB_SETTINGS_DOMAIN]; });
+    return preferences;
+}
+
 static inline id RBSetting(NSString *key, id fallback) {
-    id value = CFBridgingRelease(CFPreferencesCopyValue((__bridge CFStringRef)key,
-        (__bridge CFStringRef)RB_SETTINGS_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
-    return value ?: fallback;
+    return [RBPreferences() objectForKey:key] ?: fallback;
 }
 
 static inline BOOL RBSettingBool(NSString *key, BOOL fallback) {
@@ -21,17 +26,31 @@ static inline BOOL RBSettingBool(NSString *key, BOOL fallback) {
 }
 
 static inline void RBReloadSettings(void) {
-    CFPreferencesSynchronize((__bridge CFStringRef)RB_SETTINGS_DOMAIN,
-        kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    // Cephei 2 reloads its cache before delivering preference-change callbacks.
+    (void)RBPreferences();
+}
+
+static inline BOOL RBSignalSettingsChanged(void) {
+    NSString *notification = [RB_SETTINGS_DOMAIN stringByAppendingString:@"/ReloadPrefs"];
+    BOOL posted = notify_post(notification.UTF8String) == NOTIFY_STATUS_OK;
+    if (posted) notify_post(RB_SETTINGS_CHANGED);
+    return posted;
 }
 
 static inline BOOL RBWriteSetting(NSString *key, id value) {
-    CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value,
-        (__bridge CFStringRef)RB_SETTINGS_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    BOOL saved = CFPreferencesSynchronize((__bridge CFStringRef)RB_SETTINGS_DOMAIN,
-        kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    if (saved) notify_post(RB_SETTINGS_CHANGED);
-    return saved;
+    @try {
+        [RBPreferences() setObject:value forKey:key];
+        return RBSignalSettingsChanged();
+    } @catch (NSException *exception) {
+        NSLog(@"[Dr4wReborn] preference write failed: %@", exception.name);
+        return NO;
+    }
+}
+
+static inline void RBObserveSettings(void (^callback)(void)) {
+    [RBPreferences() registerPreferenceChangeBlock:^{
+        dispatch_async(dispatch_get_main_queue(), callback);
+    }];
 }
 
 static inline BOOL RBEnabledForBundle(NSString *bundleID) {

@@ -62,19 +62,22 @@ test('temporary hiding survives refresh and resets only on foreground entry or r
   assert.match(manager, /if \(enabled && !wasEnabled\)[\s\S]*?restoreForForeground/);
   assert.match(manager, /UISceneDidActivateNotification[\s\S]*?restoreForForeground/);
   assert.match(manager, /UISceneDidDisconnectNotification/);
-  assert.match(floating, /if \(!scene\) return;/);
+  assert.match(floating, /RBPolicyCanHostWindow\(scene != nil, \[UIApplication sharedApplication\].connectedScenes.count\)/);
   assert.match(floating, /if \(_win && _win.windowScene == scene\) return;/);
-  assert.match(floating, /_win.windowScene = scene;/);
+  assert.match(floating, /if \(scene\) _win.windowScene = scene;/);
   assert.doesNotMatch(source('Reborn/RBPrefs.m'), /setAppDisabled|@"ballOverrides"/);
 });
 
 test('settings save to a shared domain and notify running apps', () => {
   const settings = source('Shared/RBSettings.h');
-  assert.match(settings, /CFPreferencesSetValue/);
-  assert.match(settings, /if \(saved\) notify_post\(RB_SETTINGS_CHANGED\)/);
+  assert.match(settings, /\[RBPreferences\(\) setObject:value forKey:key\]/);
+  assert.match(settings, /stringByAppendingString:@"\/ReloadPrefs"/);
+  assert.match(settings, /registerPreferenceChangeBlock:\^\{\s*dispatch_async\(dispatch_get_main_queue\(\), callback\)/);
+  assert.doesNotMatch(settings, /CFPreferencesCopyValue|CFPreferencesSynchronize|initWithSuiteName/);
   const manager = source('Reborn/RBManager.m');
-  assert.match(manager, /notify_register_dispatch\(RB_SETTINGS_CHANGED[\s\S]*?RBReloadSettings\(\)/);
-  assert.match(manager, /notify_register_dispatch\("com.dsh.dr4wreborn.toggle"[\s\S]*?if \(RBMayPresent\(\)\) \[\[RBManager shared\] toggle\];/);
+  assert.match(manager, /RBObserveSettings\(\^\{/);
+  assert.doesNotMatch(manager, /notify_register_dispatch\(RB_SETTINGS_CHANGED/);
+  assert.match(manager, /notify_register_dispatch\("com.dsh.dr4wreborn.toggle"[\s\S]*?BOOL allowed = RBMayPresent\(\);[\s\S]*?if \(allowed\) \[\[RBManager shared\] toggle\];/);
 });
 
 test('Settings entry, preference bundle, and dependency are included in packaging', () => {
@@ -88,6 +91,11 @@ test('Settings entry, preference bundle, and dependency are included in packagin
   assert.match(workflow, /Library\/PreferenceLoader\/Preferences/);
   assert.match(source('control'), /Depends:.*preferenceloader/);
   assert.match(workflow, /Depends:.*preferenceloader/);
+  assert.match(source('control'), /ws.hbang.common \(>= 2.0\)/);
+  assert.match(workflow, /ws.hbang.common \(>= 2.0\)/);
+  assert.match(workflow, /cephei_sdk_2.0.zip/);
+  assert.match(workflow, /665758f996b333e8e58594af9950fc8e3ffe7c3c4078f49f66cadeaa162ef154/);
+  assert.match(workflow, /-framework Cephei -Wl,-rpath,\/var\/jb\/Library\/Frameworks/);
   assert.match(entry, /<key>icon<\/key><string>\/var\/jb\/Library\/PreferenceLoader\/Preferences\/Dr4wReborn.png<\/string>/);
   assert.match(workflow, /swift scripts\/generate-settings-icons.swift settings-icons/);
   assert.match(workflow, /cp settings-icons\/Dr4wReborn\*\.png/);
@@ -121,7 +129,23 @@ test('drawing reuses a renderer, rebuilding it on resize and skipping empty boun
   assert.match(cache, /\[self.currentTool draw\]/);
 });
 
-test('preferences reuse their suite instead of allocating on every read', () => {
+test('drawing preferences use the same sandbox-compatible backend as activation settings', () => {
   const prefs = source('Reborn/RBPrefs.m');
-  assert.match(prefs, /dispatch_once\(&once, \^\{ defaults = \[\[NSUserDefaults alloc\] initWithSuiteName:kDomain\]; \}\);/);
+  assert.match(prefs, /\+ \(HBPreferences \*\)defaults\s*\{\s*return RBPreferences\(\);/);
+  assert.doesNotMatch(prefs, /NSUserDefaults|CFPreferences/);
+  assert.match(prefs, /RBSignalSettingsChanged\(\)/);
+});
+
+test('injection uses bundle alternatives and initializes UIKit only after reaching the main queue', () => {
+  const filter = source('Dr4wReborn.plist');
+  assert.match(filter, /<key>Mode<\/key><string>Any<\/string>/);
+  for (const bundle of ['com.apple.springboard', 'com.apple.UIKit', 'com.apple.UIKitCore'])
+    assert.ok(filter.includes(`<string>${bundle}</string>`));
+  assert.doesNotMatch(filter, /<key>Classes<\/key>/);
+  const manager = source('Reborn/RBManager.m');
+  const bootstrap = manager.slice(manager.indexOf('static void RBBootstrap'));
+  assert.doesNotMatch(bootstrap.slice(0, bootstrap.indexOf('dispatch_after')), /NSClassFromString/);
+  assert.match(bootstrap, /dispatch_get_main_queue\(\)[\s\S]*?bundle.infoDictionary\[@"NSExtension"\][\s\S]*?dispatch_once\(&once/);
+  for (const event of ['loaded', 'initialized', 'toggle.received']) assert.ok(manager.includes(`@"${event}"`));
+  assert.match(source('Shared/RBDiagnostics.h'), /RB_BUILD_VERSION/);
 });

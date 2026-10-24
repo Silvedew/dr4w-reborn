@@ -1,15 +1,10 @@
 #import "RBPrefs.h"
 #import "RBSettings.h"
 
-static NSString *const kDomain = @"com.dsh.dr4wreborn";
-
 @implementation RBPrefs
 
-+ (NSUserDefaults *)defaults {
-    static NSUserDefaults *defaults;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{ defaults = [[NSUserDefaults alloc] initWithSuiteName:kDomain]; });
-    return defaults;
++ (HBPreferences *)defaults {
+    return RBPreferences();
 }
 
 + (NSArray<NSString *> *)toolNames {
@@ -39,6 +34,7 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
     for (NSInteger i = 0; i < (NSInteger)types.count; i++) {
         if ([types[i] integerValue] == (NSInteger)tool) {
             [[self defaults] setInteger:i forKey:@"toolIndex"];
+            RBSignalSettingsChanged();
             return;
         }
     }
@@ -80,6 +76,7 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 + (void)setColorIndex:(NSInteger)index {
     [[self defaults] setBool:NO forKey:@"hasCustom"];
     [[self defaults] setInteger:index forKey:@"colorIndex"];
+    RBSignalSettingsChanged();
 }
 
 + (BOOL)hasCustomColor {
@@ -87,7 +84,7 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 }
 
 + (UIColor *)customColor {
-    NSUserDefaults *d = [self defaults];
+    HBPreferences *d = [self defaults];
     return [UIColor colorWithRed:[d doubleForKey:@"cR"]
                            green:[d doubleForKey:@"cG"]
                             blue:[d doubleForKey:@"cB"]
@@ -97,12 +94,13 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 + (void)setCustomColor:(UIColor *)color {
     CGFloat r = 0, g = 0, b = 0, a = 1;
     [color getRed:&r green:&g blue:&b alpha:&a];
-    NSUserDefaults *d = [self defaults];
+    HBPreferences *d = [self defaults];
     [d setDouble:r forKey:@"cR"];
     [d setDouble:g forKey:@"cG"];
     [d setDouble:b forKey:@"cB"];
     [d setDouble:a forKey:@"cA"];
     [d setBool:YES forKey:@"hasCustom"];
+    RBSignalSettingsChanged();
 }
 
 + (NSArray<NSNumber *> *)widths {
@@ -121,10 +119,11 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 
 + (void)setWidthIndex:(NSInteger)index {
     [[self defaults] setInteger:index forKey:@"widthIndex"];
+    RBSignalSettingsChanged();
 }
 
 + (CGPoint)floatCenter {
-    NSUserDefaults *d = [self defaults];
+    HBPreferences *d = [self defaults];
     if (![d objectForKey:@"floatX"]) {
         CGSize s = [UIScreen mainScreen].bounds.size;
         return CGPointMake(s.width - 40.0, s.height * 0.35);
@@ -136,9 +135,10 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 }
 
 + (void)setFloatCenter:(CGPoint)center {
-    NSUserDefaults *d = [self defaults];
+    HBPreferences *d = [self defaults];
     [d setDouble:center.x forKey:@"floatX"];
     [d setDouble:center.y forKey:@"floatY"];
+    RBSignalSettingsChanged();
 }
 
 #pragma mark - ball
@@ -151,6 +151,7 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 
 + (void)setBallSize:(CGFloat)size {
     [[self defaults] setDouble:size forKey:@"ballSize"];
+    RBSignalSettingsChanged();
 }
 
 + (CGFloat)ballAlpha {
@@ -161,6 +162,7 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 
 + (void)setBallAlpha:(CGFloat)alpha {
     [[self defaults] setDouble:alpha forKey:@"ballAlpha"];
+    RBSignalSettingsChanged();
 }
 
 #pragma mark - per-app switch

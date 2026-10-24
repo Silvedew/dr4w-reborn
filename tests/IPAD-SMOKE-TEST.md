@@ -34,8 +34,12 @@ they do not establish real App Store sandbox/IPC behavior.
 9. Repeatedly change Split View size, switch scenes, lock/unlock, and return to
    the enabled app. Its ball must be attached to the active scene, remain tappable,
    and not appear in a disabled app. Collect fresh logs if any of these fail.
-10. Verify an enabled third-party app logs `initialized` with `backend=Cephei`
-    and `enabled=1`, then `ball.shown`. A legacy-lifecycle app may report
+10. After respring, verify SpringBoard logs `settings.service` with a registered
+    `cy:` or `lh:` service. In Bilibili (`tv.danmaku.bilianime`) and a second
+    enabled third-party app, verify `settings.snapshot` reports `success=1`
+    with `backend=Cephei` or `backend=bridge`, followed by `settings.updated`
+    with `enabled=1` and `ball.shown`. Initial `initialized enabled=0` may precede
+    the asynchronous snapshot and is not itself a failure. A legacy app may report
     `scenes=0` and `scene=legacy`; it must still show a tappable ball. After an
     unlocked volume combo, verify its `toggle.received` has `allowed=1` and
     `present.shown` follows. A background/disabled app must log `allowed=0`.
@@ -45,6 +49,11 @@ they do not establish real App Store sandbox/IPC behavior.
     If the app has no `loaded` entry, inspect injector/dyld logs; if it loads but
     logs `enabled=0`, inspect shared configuration; if it is enabled but logs
     `ball.skipped`, inspect the recorded foreground/scene reason.
+12. In an app using `backend=bridge`, change pen color/width and ball position,
+    reopen it, and verify the changes persist with `settings.write saved=1`.
+    If neither service is reachable, save `settings.lookup`/`settings.transport`
+    entries alongside the SpringBoard registration entries; do not interpret
+    `settings.snapshot success=0` as an intentionally empty enabled-app list.
 
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,

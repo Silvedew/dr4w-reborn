@@ -3,9 +3,10 @@
 Run after installing the new package and respringing, so the old dylib is unloaded.
 
 1. Open Settings -> 全局画板. Confirm the master, home-screen, and volume-shortcut
-   switches are on; the floating-ball switch is off; all app switches are off.
-   Enable one app and leave another disabled. Enter Split View. No floating ball
-   should appear by default.
+   switches are on; there is no separate floating-ball switch. Existing app
+   selections must survive upgrading. In App 启用, enable one app and leave
+   another disabled. Enter Split View: only the enabled app should show a ball.
+   Tap it to open the drawing panel.
 2. On an unlocked device, press Volume Up then Volume Down within 0.9 seconds.
    Verify the drawing panel opens and closes on the home screen and in the
    enabled app, but not in the disabled app. Repeat at minimum and maximum volume.
@@ -19,8 +20,16 @@ Run after installing the new package and respringing, so the old dylib is unload
    source regression guards do not establish device stability.
 7. While an app is running, turn its app switch off in Settings, then return.
    It must not respond or show a ball. Re-enable it and verify the shortcut works
-   without respringing. Toggle ball visibility independently; finally turn the
+   without respringing. Long-press the ball to hide it, change an unrelated setting,
+   and verify it stays hidden until leaving and re-entering the app. Finally turn the
    master switch off and verify all plugin entry points stop responding.
+8. Verify Settings' 全局画板 entry has the white circular pencil icon. In App 启用,
+   each visible app should have its own icon (generic app icon if unavailable).
+   Hidden helpers/extensions must not appear. Real apps sharing a name must show
+   their distinct identifiers beneath the name and have independent switches.
+9. Repeatedly change Split View size, switch scenes, lock/unlock, and return to
+   the enabled app. Its ball must be attached to the active scene, remain tappable,
+   and not appear in a disabled app. Collect fresh logs if any of these fail.
 
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,

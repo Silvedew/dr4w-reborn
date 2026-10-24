@@ -1,5 +1,30 @@
 // Foundation-only UI declarations for testing the production Settings controller.
 #import <Foundation/Foundation.h>
+#define NSFontAttributeName @"NSFont"
+#define NSForegroundColorAttributeName @"NSColor"
+
+@interface UIImage : NSObject
++ (instancetype)systemImageNamed:(NSString *)name;
+@end
+@interface UIScreen : NSObject
++ (instancetype)mainScreen;
+@property (nonatomic, readonly) CGFloat scale;
+@end
+@interface UIFont : NSObject
++ (instancetype)systemFontOfSize:(CGFloat)size;
+@end
+@interface UIColor : NSObject
++ (instancetype)secondaryLabelColor;
+@end
+@interface UILabel : NSObject
+@property (nonatomic) NSInteger numberOfLines;
+@property (nonatomic, strong) NSAttributedString *attributedText;
+@end
+@interface UITableView : NSObject
+@end
+@interface UITableViewCell : NSObject
+@property (nonatomic, strong) UILabel *textLabel;
+@end
 
 @interface UIViewController : NSObject
 @property (nonatomic, copy) NSString *title;

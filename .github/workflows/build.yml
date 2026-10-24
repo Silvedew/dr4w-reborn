@@ -30,6 +30,9 @@ jobs:
           /tmp/rb-controller-tests
           plutil -lint Preferences/Info.plist Preferences/Dr4wReborn.plist
 
+      - name: Render and verify Settings icons
+        run: swift scripts/generate-settings-icons.swift settings-icons
+
       - name: Show SDK
         run: xcrun --sdk iphoneos --show-sdk-path
 
@@ -66,6 +69,7 @@ jobs:
           mkdir -p pkg/var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle pkg/var/jb/Library/PreferenceLoader/Preferences
           cp Dr4wRebornPrefs Preferences/Info.plist pkg/var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle/
           cp Preferences/Dr4wReborn.plist pkg/var/jb/Library/PreferenceLoader/Preferences/
+          cp settings-icons/Dr4wReborn*.png pkg/var/jb/Library/PreferenceLoader/Preferences/
           sed -i '' "s/^Version:.*/Version: ${VER}/" pkg/DEBIAN/control
           grep -a '^Version' pkg/DEBIAN/control
           ldid -S pkg/var/jb/Library/MobileSubstrate/DynamicLibraries/Dr4wReborn.dylib

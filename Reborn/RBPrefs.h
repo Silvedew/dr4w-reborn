@@ -35,6 +35,5 @@
 
 /* per-app switch */
 + (BOOL)isAppDisabled:(NSString *)bundleID;
-+ (void)setAppDisabled:(NSString *)bundleID disabled:(BOOL)disabled;
 
 @end

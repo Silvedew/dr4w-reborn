@@ -41,9 +41,11 @@ control                 deb metadata
   `/var/mobile/Media/Dr4wReborn/`
 - Summon / dismiss with **Volume Up -> Volume Down** (within 0.9 s, device unlocked)
 - Settings -> 全局画板: master switch, home-screen switch, volume shortcut,
-  floating-ball visibility, and an installed-app enable list
-- Apps default to disabled; floating balls default to hidden. Enabling an app
-  does not require displaying its ball. Settings changes apply without respringing.
+  and an App 启用 list with native app icons and hidden-component filtering
+- Apps default to disabled. Enabling an app shows its floating ball on entering
+  that app; tap it to draw. Old permanent ball-hiding preferences are ignored.
+- Long-press the ball (or use the drawing menu) to hide it for the current visit.
+  Returning to the app restores it. Settings changes apply without respringing.
 - Locking closes the drawing panel; SpringBoard observes volume button methods
   instead of polling audio or frontmost-app interfaces. Normal volume behavior is preserved.
 - Preferences persist between launches
@@ -53,11 +55,11 @@ control                 deb metadata
 1. Actions tab -> `build` -> Run workflow (or just push).
 2. Download the `Dr4wReborn-deb` artifact and install with Sileo/Filza.
 3. Respring.
-4. Open Settings -> 全局画板 -> 在哪些 App 启用 and enable the apps you want.
+4. Open Settings -> 全局画板 -> App 启用 and enable the apps you want.
 5. In an enabled app (or on the home screen), press Volume Up then Volume Down
    within 0.9 seconds to toggle the panel. The volume shortcut has its own switch.
-6. Leave 在已启用的 App 显示圆球 off to keep balls hidden. Enable it if you prefer
-   a visible entry; an app's in-panel ball switch overrides this default.
+6. Return to an enabled app and tap its floating ball to open the panel.
+   Long-press temporarily hides it; leaving and re-entering the app restores it.
 
 After upgrading, respring before testing so SpringBoard unloads the old dylib.
 Device stability checks are listed in [tests/IPAD-SMOKE-TEST.md](tests/IPAD-SMOKE-TEST.md).

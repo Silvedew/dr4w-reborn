@@ -169,13 +169,4 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
     return !RBBallForBundle(bundleID);
 }
 
-+ (void)setAppDisabled:(NSString *)bundleID disabled:(BOOL)disabled {
-    if (!bundleID) return;
-    id value = RBSetting(@"ballOverrides", @{});
-    NSMutableDictionary *overrides = [value isKindOfClass:[NSDictionary class]]
-        ? [value mutableCopy] : [NSMutableDictionary dictionary];
-    overrides[bundleID] = @(!disabled);
-    RBWriteSetting(@"ballOverrides", overrides);
-}
-
 @end

@@ -154,12 +154,17 @@ static void RBBootstrap(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         RBReloadSettings();
+        __block BOOL wasEnabled = RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]);
         int settingsToken = 0;
         notify_register_dispatch(RB_SETTINGS_CHANGED, &settingsToken, dispatch_get_main_queue(), ^(int t) {
             RBReloadSettings();
             gVolumeSequence = (RBVolumeSequence){0};
             if (!RBMayPresent()) [[RBManager shared] dismiss];
-            [[RBFloating shared] refreshVisibility];
+            BOOL enabled = RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]);
+            if (enabled && !wasEnabled)
+                [[RBFloating shared] restoreForForeground];
+            else [[RBFloating shared] refreshVisibility];
+            wasEnabled = enabled;
             RBStopLayoutPolling();
             if (RBMayPresent()) RBStartLayoutPolling();
         });
@@ -193,9 +198,21 @@ static void RBBootstrap(void) {
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
             RBReloadSettings();
-            [[RBFloating shared] refreshVisibility];
+            [[RBFloating shared] restoreForForeground];
             RBStartLayoutPolling();
         }];
+        [nc addObserverForName:UISceneDidActivateNotification object:nil
+                         queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+            RBReloadSettings();
+            [[RBFloating shared] restoreForForeground];
+            RBStartLayoutPolling();
+        }];
+        for (NSNotificationName name in @[UISceneWillDeactivateNotification, UISceneDidDisconnectNotification]) {
+            [nc addObserverForName:name object:nil queue:[NSOperationQueue mainQueue]
+                        usingBlock:^(NSNotification *note) {
+                [[RBFloating shared] sceneDidDeactivate:note.object];
+            }];
+        }
         [nc addObserverForName:UIApplicationDidEnterBackgroundNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]

@@ -41,15 +41,31 @@ test('locking resets the trigger and closes the drawing window', () => {
   assert.match(manager, /if \(self->_window != w\) return;\s*if \(!RBMayPresent\(\)\) return;/);
 });
 
-test('ball visibility and per-app activation remain independent', () => {
+test('enabling an app shows its ball without legacy visibility overrides', () => {
   const settings = source('Shared/RBSettings.h');
   assert.match(settings, /RBSetting\(@"enabledApps", @\[\]\)/);
-  assert.match(settings, /RBSettingBool\(@"showBall", NO\)/);
-  assert.match(settings, /RBPolicyBall\(RBEnabledForBundle\(bundleID\)/);
+  assert.match(settings, /RBBallForBundle[\s\S]*?return RBEnabledForBundle\(bundleID\);/);
+  assert.doesNotMatch(settings, /@"showBall"|@"ballOverrides"/);
   assert.match(source('Reborn/RBPrefs.m'), /return !RBBallForBundle\(bundleID\);/);
   const manager = source('Reborn/RBManager.m');
   assert.match(manager, /if \(\[RBPrefs isAppDisabled:[\s\S]*?&&\s*!\[\[RBManager shared\] isShowing\]\) return;/);
   assert.match(manager, /if \(!RBEnabledForBundle\(\[\[NSBundle mainBundle\] bundleIdentifier\]\)\) return NO;/);
+});
+
+test('temporary hiding survives refresh and resets only on foreground entry or re-enabling', () => {
+  const floating = source('Reborn/RBFloating.m');
+  const show = floating.slice(floating.indexOf('- (void)show'), floating.indexOf('- (void)hide'));
+  assert.doesNotMatch(show, /_userHidden = NO/);
+  assert.match(show, /RBPolicyBall\(!\[self disabledHere\], _userHidden\)/);
+  assert.match(floating, /restoreForForeground\s*\{\s*_userHidden = NO;/);
+  const manager = source('Reborn/RBManager.m');
+  assert.match(manager, /if \(enabled && !wasEnabled\)[\s\S]*?restoreForForeground/);
+  assert.match(manager, /UISceneDidActivateNotification[\s\S]*?restoreForForeground/);
+  assert.match(manager, /UISceneDidDisconnectNotification/);
+  assert.match(floating, /if \(!scene\) return;/);
+  assert.match(floating, /if \(_win && _win.windowScene == scene\) return;/);
+  assert.match(floating, /_win.windowScene = scene;/);
+  assert.doesNotMatch(source('Reborn/RBPrefs.m'), /setAppDisabled|@"ballOverrides"/);
 });
 
 test('settings save to a shared domain and notify running apps', () => {
@@ -72,6 +88,11 @@ test('Settings entry, preference bundle, and dependency are included in packagin
   assert.match(workflow, /Library\/PreferenceLoader\/Preferences/);
   assert.match(source('control'), /Depends:.*preferenceloader/);
   assert.match(workflow, /Depends:.*preferenceloader/);
+  assert.match(entry, /<key>icon<\/key><string>\/var\/jb\/Library\/PreferenceLoader\/Preferences\/Dr4wReborn.png<\/string>/);
+  assert.match(workflow, /swift scripts\/generate-settings-icons.swift settings-icons/);
+  assert.match(workflow, /cp settings-icons\/Dr4wReborn\*\.png/);
+  assert.match(source('scripts/generate-settings-icons.swift'), /Shared\/RBIconStyle.h/);
+  assert.match(source('Reborn/RBFloating.m'), /systemImageNamed:@RB_PENCIL_SYMBOL/);
 });
 
 test('Settings pages publish rows to PSListController and clear their cache on reload', () => {

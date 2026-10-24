@@ -43,9 +43,5 @@ static inline BOOL RBEnabledForBundle(NSString *bundleID) {
 }
 
 static inline BOOL RBBallForBundle(NSString *bundleID) {
-    id overrides = RBSetting(@"ballOverrides", @{});
-    id override = [overrides isKindOfClass:[NSDictionary class]] && bundleID ? overrides[bundleID] : nil;
-    BOOL hasOverride = [override isKindOfClass:[NSNumber class]];
-    return RBPolicyBall(RBEnabledForBundle(bundleID), RBSettingBool(@"showBall", NO),
-        hasOverride, hasOverride ? [override boolValue] : NO);
+    return RBEnabledForBundle(bundleID);
 }

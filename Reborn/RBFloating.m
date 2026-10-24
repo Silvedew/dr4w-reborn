@@ -1,6 +1,8 @@
 #import "RBFloating.h"
 #import "RBManager.h"
 #import "RBPrefs.h"
+#import "RBPolicy.h"
+#import "RBIconStyle.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -28,12 +30,12 @@
 }
 
 - (UIWindowScene *)activeScene {
+    if (_win.windowScene && _win.windowScene.activationState == UISceneActivationStateForegroundActive &&
+        [[UIApplication sharedApplication].connectedScenes containsObject:_win.windowScene])
+        return _win.windowScene;
     for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
         if (![s isKindOfClass:[UIWindowScene class]]) continue;
         if (s.activationState == UISceneActivationStateForegroundActive) return (UIWindowScene *)s;
-    }
-    for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
-        if ([s isKindOfClass:[UIWindowScene class]]) return (UIWindowScene *)s;
     }
     return nil;
 }
@@ -43,14 +45,20 @@
 }
 
 - (void)buildIfNeeded {
-    if (_win) return;
+    UIWindowScene *scene = [self activeScene];
+    if (!scene) return;
+    if (_win && _win.windowScene == scene) return;
+    _win.hidden = YES;
+    _win.rootViewController = nil;
+    _win = nil;
+    _snapped = NO;
     CGFloat size = [self size];
 
     CGPoint c = [RBPrefs floatCenter];
     _win = [[UIWindow alloc] initWithFrame:[self clamped:CGRectMake(c.x - size / 2.0,
                                                                     c.y - size / 2.0,
                                                                     size, size)]];
-    _win.windowScene = [self activeScene];
+    _win.windowScene = scene;
     _win.windowLevel = UIWindowLevelAlert + 900.0;
     _win.backgroundColor = [UIColor clearColor];
 
@@ -95,8 +103,8 @@
     UIImageSymbolConfiguration *cfg =
         [UIImageSymbolConfiguration configurationWithPointSize:24.0
                                                         weight:UIImageSymbolWeightMedium];
-    UIImage *img = [UIImage systemImageNamed:@"pencil.tip" withConfiguration:cfg];
-    if (!img) img = [UIImage systemImageNamed:@"pencil.tip"];
+    UIImage *img = [UIImage systemImageNamed:@RB_PENCIL_SYMBOL withConfiguration:cfg];
+    if (!img) img = [UIImage systemImageNamed:@RB_PENCIL_SYMBOL];
     return img;
 }
 
@@ -112,10 +120,9 @@
         return;
     }
     if ([[RBManager shared] isShowing]) { _win.hidden = YES; return; }
-    if ([self disabledHere]) { _win.hidden = YES; return; }
+    if (!RBPolicyBall(![self disabledHere], _userHidden)) { _win.hidden = YES; return; }
     @try {
         [self buildIfNeeded];
-        _userHidden = NO;
         _win.hidden = NO;
         [self applyPrefs];
     } @catch (NSException *e) {
@@ -125,6 +132,20 @@
 
 - (void)hide {
     _win.hidden = YES;
+}
+
+- (void)hideTemporarily {
+    _userHidden = YES;
+    [self hide];
+}
+
+- (void)restoreForForeground {
+    _userHidden = NO;
+    [self refreshVisibility];
+}
+
+- (void)sceneDidDeactivate:(UIScene *)scene {
+    if (_win.windowScene == scene) [self hide];
 }
 
 - (void)refreshVisibility {
@@ -184,8 +205,7 @@
 
 - (void)longPressed:(UILongPressGestureRecognizer *)g {
     if (g.state != UIGestureRecognizerStateBegan) return;
-    _userHidden = YES;
-    _win.hidden = YES;
+    [self hideTemporarily];
 }
 
 - (void)panned:(UIPanGestureRecognizer *)g {

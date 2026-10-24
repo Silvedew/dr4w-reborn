@@ -8,11 +8,18 @@ int main(void) {
             for (int selected = 0; selected < 2; selected++) {
                 assert(RBPolicyEnabled(master, home, selected, true) == (master && home));
                 assert(RBPolicyEnabled(master, home, selected, false) == (master && selected));
-                assert(!RBPolicyBall(false, master, home, selected));
-                assert(RBPolicyBall(true, master, home, selected) == (home ? selected : master));
+                assert(!RBPolicyBall(false, selected));
+                assert(RBPolicyBall(true, selected) == !selected);
             }
         }
     }
+    bool temporarilyHidden = false;
+    assert(RBPolicyBall(true, temporarilyHidden));
+    temporarilyHidden = true;
+    assert(!RBPolicyBall(true, temporarilyHidden));
+    assert(!RBPolicyBall(false, temporarilyHidden));
+    temporarilyHidden = false; // Foreground re-entry clears temporary hiding.
+    assert(RBPolicyBall(true, temporarilyHidden));
     RBVolumeSequence state = {0};
     assert(!RBVolumePress(&state, false, 1, true)); // Down alone.
     assert(!RBVolumePress(&state, true, 2, true));

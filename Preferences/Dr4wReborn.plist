@@ -7,4 +7,5 @@
     <key>detail</key><string>RBRootListController</string>
     <key>isController</key><true/>
     <key>label</key><string>全局画板</string>
+    <key>icon</key><string>/var/jb/Library/PreferenceLoader/Preferences/Dr4wReborn.png</string>
 </dict></dict></plist>

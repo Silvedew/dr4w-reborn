@@ -301,10 +301,7 @@
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showBallAlpha]; }]];
     if (!RBIsSpringBoard()) {
-        NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
-        BOOL disabled = [RBPrefs isAppDisabled:bid];
-        [sheet addAction:[UIAlertAction actionWithTitle:(disabled ? @"在本 App 显示悬浮球"
-                                                                 : @"在本 App 隐藏悬浮球")
+        [sheet addAction:[UIAlertAction actionWithTitle:@"本次使用隐藏圆球"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction *a) { [self toggleAppBall]; }]];
     }
@@ -381,10 +378,7 @@
 }
 
 - (void)toggleAppBall {
-    NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
-    BOOL disabled = [RBPrefs isAppDisabled:bid];
-    [RBPrefs setAppDisabled:bid disabled:!disabled];
-    [[RBFloating shared] refreshVisibility];
+    [[RBFloating shared] hideTemporarily];
 }
 
 - (void)showWidths {

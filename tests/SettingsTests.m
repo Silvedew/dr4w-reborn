@@ -16,11 +16,11 @@ int main(void) {
         RBReloadSettings();
         assert(RBEnabledForBundle(@"test.reader"));
         assert(!RBEnabledForBundle(@"test.other"));
-        assert(!RBBallForBundle(@"test.reader")); // Enabled != visible ball.
-        assert(RBWriteSetting(@"showBall", @YES));
         assert(RBBallForBundle(@"test.reader"));
+        assert(RBWriteSetting(@"showBall", @NO));
+        assert(RBBallForBundle(@"test.reader")); // Legacy global setting is ignored.
         assert(RBWriteSetting(@"ballOverrides", @{@"test.reader":@NO}));
-        assert(!RBBallForBundle(@"test.reader"));
+        assert(RBBallForBundle(@"test.reader")); // Legacy permanent hide is ignored.
         assert(RBWriteSetting(@"ballOverrides", @{@"test.reader":@YES}));
         assert(RBWriteSetting(@"enabled", @NO));
         assert(!RBEnabledForBundle(@"test.reader"));

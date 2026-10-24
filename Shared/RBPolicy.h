@@ -6,8 +6,8 @@ static inline bool RBPolicyEnabled(bool master, bool home, bool selected, bool i
     return master && (isHome ? home : selected);
 }
 
-static inline bool RBPolicyBall(bool enabled, bool global, bool hasOverride, bool override) {
-    return enabled && (hasOverride ? override : global);
+static inline bool RBPolicyBall(bool enabled, bool temporarilyHidden) {
+    return enabled && !temporarilyHidden;
 }
 
 typedef struct {

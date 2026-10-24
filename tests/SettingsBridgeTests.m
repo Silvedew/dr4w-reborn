@@ -11,10 +11,15 @@ static NSString *gTestDomain;
 static BOOL gCepheiHealthy;
 static NSMutableDictionary *gCepheiValues;
 static void (^gCepheiCallback)(void);
+static dispatch_semaphore_t gCepheiStallGate;
 @interface HBPreferencesIPC : HBPreferences
 @end
 @implementation HBPreferencesIPC
-- (NSDictionary *)dictionaryRepresentation { return gCepheiHealthy ? [gCepheiValues copy] : nil; }
+- (NSDictionary *)dictionaryRepresentation {
+    dispatch_semaphore_t gate = gCepheiStallGate;
+    if (gate) dispatch_semaphore_wait(gate, DISPATCH_TIME_FOREVER);
+    return gCepheiHealthy ? [gCepheiValues copy] : nil;
+}
 - (id)objectForKey:(NSString *)key { assert(!"App reads must use the snapshot"); return nil; }
 - (void)setObject:(id)value forKey:(NSString *)key { assert(gCepheiHealthy); gCepheiValues[key] = value; }
 - (void)registerPreferenceChangeBlock:(void (^)(void))callback { gCepheiCallback = [callback copy]; callback(); }
@@ -127,6 +132,16 @@ int main(int argc, const char *argv[]) {
         gCepheiHealthy = NO;
         Refresh();
         assert(RBBallForBundle(@"tv.danmaku.bilianime"));
+        // A hung Cephei read must not prevent the healthy bridge from being used.
+        gCepheiStallGate = dispatch_semaphore_create(0);
+        NSDate *cepheiStart = [NSDate date];
+        Refresh();
+        assert(-cepheiStart.timeIntervalSinceNow < 2.0);
+        assert(gCepheiRead && RBBallForBundle(@"tv.danmaku.bilianime"));
+        dispatch_semaphore_t gate = gCepheiStallGate;
+        gCepheiStallGate = nil;
+        dispatch_semaphore_signal(gate);
+        Refresh();
         [server terminate]; [server waitUntilExit];
         Refresh();
         assert(RBBallForBundle(@"tv.danmaku.bilianime")); // Failed read retains last snapshot.

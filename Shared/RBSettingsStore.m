@@ -106,6 +106,24 @@ static dispatch_queue_t RBSettingsQueue(void) {
     return queue;
 }
 
+// Cephei's own transport has no caller-controlled timeout. Never let it hold up
+// the bridge queue, and never spawn more than one outstanding Cephei read.
+static dispatch_group_t gCepheiRead;
+static NSDictionary *gCepheiResult;
+static NSDictionary *RBReadCephei(void) {
+    if (!gCepheiRead) {
+        gCepheiRead = dispatch_group_create();
+        dispatch_group_async(gCepheiRead, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            gCepheiResult = RBPreferences().dictionaryRepresentation;
+        });
+    }
+    if (dispatch_group_wait(gCepheiRead, dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC)) != 0)
+        return nil;
+    NSDictionary *result = gCepheiResult;
+    gCepheiRead = nil;
+    return result;
+}
+
 static NSDictionary *gSnapshot;
 static NSMutableArray *gSettingsObservers;
 static BOOL gRefreshPending;
@@ -125,7 +143,7 @@ void RBRefreshSettings(void) {
     if (gRefreshPending) { gRefreshAgain = YES; return; }
     gRefreshPending = YES;
     dispatch_async(RBSettingsQueue(), ^{
-        NSDictionary *values = RBPreferences().dictionaryRepresentation;
+        NSDictionary *values = RBReadCephei();
         NSString *backend = @"Cephei";
         if (!values) {
             values = RBBridgeRequest(@{@"domain": RB_SETTINGS_DOMAIN, @"operation": @"read"})[@"values"];
@@ -170,18 +188,12 @@ BOOL RBStoreSetting(NSString *key, id value) {
     updated[key] = value;
     gSnapshot = updated;
     dispatch_async(RBSettingsQueue(), ^{
-        // Verify the IPC backend before trusting HBPreferences' void setter.
-        NSDictionary *values = RBPreferences().dictionaryRepresentation;
-        BOOL saved;
-        if (values) {
-            [RBPreferences() setObject:value forKey:key];
-            saved = RBSignalSettingsChanged();
-        } else {
-            NSMutableDictionary *request = [@{@"domain": RB_SETTINGS_DOMAIN,
-                @"operation": value ? @"write" : @"remove", @"key": key} mutableCopy];
-            if (value) request[@"value"] = value;
-            saved = [RBBridgeRequest(request)[@"saved"] boolValue];
-        }
+        // App writes always use the bounded bridge: Cephei's void setter cannot
+        // acknowledge failures or enforce a deadline. Settings still writes locally.
+        NSMutableDictionary *request = [@{@"domain": RB_SETTINGS_DOMAIN,
+            @"operation": value ? @"write" : @"remove", @"key": key} mutableCopy];
+        if (value) request[@"value"] = value;
+        BOOL saved = [RBBridgeRequest(request)[@"saved"] boolValue];
         RBDiagnostic(@"settings.write", saved ? @"saved=1" : @"saved=0");
         dispatch_async(dispatch_get_main_queue(), ^{ RBRefreshSettings(); });
     });

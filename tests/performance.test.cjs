@@ -145,6 +145,7 @@ test('sandbox settings use event-driven snapshots and bounded worker-queue trans
   assert.match(refresh, /if \(snapshot\) gSnapshot = snapshot/);
   assert.match(refresh, /if \(gRefreshPending\)/);
   assert.match(store, /0\.15, 0\.25, kCFRunLoopDefaultMode/);
+  assert.match(store, /dispatch_group_wait\(gCepheiRead, dispatch_time\(DISPATCH_TIME_NOW, 250 \* NSEC_PER_MSEC\)\)/);
   assert.match(store, /@"cy:"/);
   assert.match(store, /@"lh:"/);
   assert.match(store, /request\[@"domain"\] isEqual:RB_SETTINGS_DOMAIN/);

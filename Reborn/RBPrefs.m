@@ -5,7 +5,10 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 @implementation RBPrefs
 
 + (NSUserDefaults *)defaults {
-    return [[NSUserDefaults alloc] initWithSuiteName:kDomain];
+    static NSUserDefaults *defaults;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ defaults = [[NSUserDefaults alloc] initWithSuiteName:kDomain]; });
+    return defaults;
 }
 
 + (NSArray<NSString *> *)toolNames {

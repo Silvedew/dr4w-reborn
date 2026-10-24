@@ -51,6 +51,8 @@
 
 @property (nonatomic, strong) id<ACEDrawingTool> currentTool;
 @property (nonatomic, strong) UIImage *cacheImage;
+@property (nonatomic, strong) UIGraphicsImageRenderer *cacheRenderer;
+@property (nonatomic) CGSize cacheRendererSize;
 
 @property (nonatomic, strong) ACEDrawingLabelView *draggableTextView;
 @end
@@ -147,8 +149,12 @@
 
 - (void)updateCacheImage:(BOOL)redraw
 {
-    // init a context
-    UIGraphicsBeginImageContextWithOptions(self.bounds.size, NO, 0.0);
+    if (CGRectIsEmpty(self.bounds)) return;
+    if (!self.cacheRenderer || !CGSizeEqualToSize(self.cacheRendererSize, self.bounds.size)) {
+        self.cacheRenderer = [[UIGraphicsImageRenderer alloc] initWithSize:self.bounds.size];
+        self.cacheRendererSize = self.bounds.size;
+    }
+    self.cacheImage = [self.cacheRenderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
     
     if (redraw) {
         // erase the previous image
@@ -184,9 +190,7 @@
         [self.currentTool draw];
     }
     
-    // store the image
-    self.cacheImage = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
+    }];
 }
 
 - (UIImage *)drawings

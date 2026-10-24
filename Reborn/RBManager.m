@@ -20,6 +20,24 @@ static NSString      *gBuffer     = @"";
 static NSTimeInterval gLastPress  = 0;
 static NSTimer       *gFastTimer  = nil;
 static NSInteger      gFastGen    = 0;
+static NSTimer       *gLayoutTimer = nil;
+
+static void RBStopLayoutPolling(void) {
+    [gLayoutTimer invalidate];
+    gLayoutTimer = nil;
+}
+
+static void RBStartLayoutPolling(void) {
+    if (gLayoutTimer) return;
+    __block CGRect lastBounds = CGRectNull;
+    gLayoutTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
+        CGRect host = RBHostBounds();
+        if (CGRectEqualToRect(host, lastBounds)) return;
+        lastBounds = host;
+        [[RBManager shared] layoutForCurrentHost];
+    }];
+    gLayoutTimer.tolerance = 0.2;
+}
 
 BOOL RBIsSpringBoard(void) {
     return [[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.springboard"];
@@ -133,7 +151,8 @@ static void RBStartFastPolling(void) {
     gFastTimer = [NSTimer scheduledTimerWithTimeInterval:0.12 repeats:YES block:^(NSTimer *timer) {
         RBPollVolume();
     }];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)),
+    gFastTimer.tolerance = 0.02;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (gen != gFastGen) return;
         [gFastTimer invalidate];
@@ -190,17 +209,6 @@ static void RBBootstrap(void) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        /* split view / slide over resize the scene without a convenient
-           notification on this SDK: watch the host size cheaply */
-        [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
-            static CGFloat lastW = 0, lastH = 0;
-            CGRect host = RBHostBounds();
-            if (host.size.width == lastW && host.size.height == lastH) return;
-            lastW = host.size.width;
-            lastH = host.size.height;
-            [[RBManager shared] layoutForCurrentHost];
-        }];
-
         if (RBIsSpringBoard()) {
             /* SpringBoard: volume trigger only, no ball */
             int token = 0;
@@ -214,10 +222,12 @@ static void RBBootstrap(void) {
                                             NULL,
                                             CFNotificationSuspensionBehaviorDeliverImmediately);
 
-            /* slow idle poll; speeds up for 8 s after every key press */
-            [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
+            /* Keep a fallback for devices that do not deliver volume notifications. */
+            NSTimer *volumeTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
+                if (gFastTimer) return;
                 RBPollVolume();
             }];
+            volumeTimer.tolerance = 0.1;
             return;
         }
 
@@ -228,13 +238,18 @@ static void RBBootstrap(void) {
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
             [[RBFloating shared] refreshVisibility];
+            RBStartLayoutPolling();
         }];
         [nc addObserverForName:UIApplicationDidEnterBackgroundNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
             [[RBFloating shared] hide];
+            RBStopLayoutPolling();
         }];
-        [[RBFloating shared] refreshVisibility];
+        if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
+            [[RBFloating shared] refreshVisibility];
+            RBStartLayoutPolling();
+        }
     });
 }

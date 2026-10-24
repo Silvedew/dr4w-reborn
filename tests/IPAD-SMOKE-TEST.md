@@ -55,17 +55,27 @@ they do not establish real App Store sandbox/IPC behavior.
     entries alongside the SpringBoard registration entries; do not interpret
     `settings.snapshot success=0` as an intentionally empty enabled-app list.
 
-13. In light and dark appearances, verify the toolbar and blue pencil ball remain
+13. In light and dark appearances, verify the toolbar and monochrome pencil ball remain
     legible over a busy app. Enable Reduce Transparency and Increase Contrast:
     toolbar material becomes solid and its boundary remains clear. Enable Reduce
     Motion: button feedback must not scale. Verify VoiceOver announces each action.
-14. Resize Split View and rotate with the canvas open. The toolbar stays inside
-    safe areas; short windows use a horizontal toolbar, and smaller windows allow
-    scrolling to all five 44-point controls. Verify every action and the explicit
-    More Colors palette button. Confirm ball dragging, temporary hiding and idle
-    fade timing still behave as before.
+14. Move the toolbar using its 44-point top handle. Verify buttons do not trigger
+    while moving, release keeps the position without snapping, and outside-bar
+    gestures continue drawing. Resize Split View and rotate: the toolbar keeps
+    its relative position within safe areas and always remains vertical. In short
+    windows, scroll to all six 44-point controls while the handle stays visible.
+    Close/reopen the panel: its position resets to the right-hand center.
+    Verify VoiceOver's four directional handle actions. Confirm ball dragging,
+    temporary hiding and idle fade timing still behave as before.
 15. Increase text size in Settings, reopen App Enable, and verify duplicate app
     identifiers remain legible, row heights grow, and switches stay operable.
+16. Tap Width between Color and Close. Adjust from 1 to 30: the thumb number,
+    line preview and next drawn stroke must match the chosen integer. Close the
+    popover or lift the finger; reopening the app must retain the width. Repeat
+    with VoiceOver's one-point increments and dismissal. An upgrade must preserve
+    existing 2/4/7/12/20 pt choices before using the new slider. Check the Settings
+    entry's white circle/gray pencil and toolbar gear; installed-app icons and
+    selected ink colors must keep their colors.
 
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,

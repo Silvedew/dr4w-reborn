@@ -82,7 +82,7 @@
     _btn = [[RBChromeButton alloc] initWithFrame:CGRectZero];
     _btn.frame = _ball.bounds;
     _btn.backgroundColor = [UIColor clearColor];
-    _btn.tintColor = UIColor.systemBlueColor;
+    _btn.tintColor = UIColor.labelColor;
     _btn.accessibilityLabel = @"打开全局画板";
     _btn.accessibilityHint = @"可拖动调整位置，长按临时隐藏";
     _btn.largeContentTitle = @"全局画板";

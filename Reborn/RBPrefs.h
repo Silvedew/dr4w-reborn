@@ -17,6 +17,7 @@
 
 + (NSInteger)widthIndex;
 + (CGFloat)lineWidth;
++ (void)setLineWidth:(CGFloat)width;
 + (void)setWidthIndex:(NSInteger)index;
 
 + (NSArray<NSString *> *)toolNames;

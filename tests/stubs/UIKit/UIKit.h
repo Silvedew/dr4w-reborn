@@ -4,11 +4,12 @@
 #define NSForegroundColorAttributeName @"NSColor"
 #define UIFontTextStyleBody @"body"
 #define UIFontTextStyleCaption2 @"caption2"
-typedef NS_ENUM(NSInteger, UIImageRenderingMode) { UIImageRenderingModeAlwaysOriginal = 1 };
+typedef NS_ENUM(NSInteger, UIImageRenderingMode) { UIImageRenderingModeAlwaysOriginal = 1, UIImageRenderingModeAlwaysTemplate = 2 };
 
 @interface UIImage : NSObject
 + (instancetype)systemImageNamed:(NSString *)name;
 - (instancetype)imageWithTintColor:(id)color renderingMode:(UIImageRenderingMode)mode;
+- (instancetype)imageWithRenderingMode:(UIImageRenderingMode)mode;
 @end
 @interface UIScreen : NSObject
 + (instancetype)mainScreen;
@@ -22,6 +23,7 @@ typedef NS_ENUM(NSInteger, UIImageRenderingMode) { UIImageRenderingModeAlwaysOri
 @interface UIColor : NSObject
 + (instancetype)secondaryLabelColor;
 + (instancetype)systemBlueColor;
++ (instancetype)labelColor;
 @end
 @interface UILabel : NSObject
 @property (nonatomic) NSInteger numberOfLines;
@@ -31,8 +33,12 @@ typedef NS_ENUM(NSInteger, UIImageRenderingMode) { UIImageRenderingModeAlwaysOri
 @end
 @interface UITableView : NSObject
 @end
+@interface UIImageView : NSObject
+@property (nonatomic, strong) UIColor *tintColor;
+@end
 @interface UITableViewCell : NSObject
 @property (nonatomic, strong) UILabel *textLabel;
+@property (nonatomic, strong) UIImageView *imageView;
 @end
 
 @interface UIViewController : NSObject

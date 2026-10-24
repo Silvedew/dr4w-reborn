@@ -97,6 +97,9 @@ int main(int argc, const char *argv[]) {
         assert(!RBDecode([NSMutableData dataWithLength:256 * 1024 + 1]));
         assert(!RBDecode([@"invalid" dataUsingEncoding:NSUTF8StringEncoding]));
         assert(!RBWritableDrawingKey(@"floatX", @(NAN)));
+        assert(!RBWritableDrawingKey(@"strokeWidth", @0));
+        assert(!RBWritableDrawingKey(@"strokeWidth", @31));
+        assert(!RBWritableDrawingKey(@"strokeWidth", @1.5));
         assert(!RBHandleSettingsRequest(@{@"domain": gTestDomain, @"operation": @7}));
 
         gClientPreferences = [HBPreferencesIPC new];
@@ -113,6 +116,10 @@ int main(int argc, const char *argv[]) {
             return [RBBridgeRequest(Request(@"read"))[@"values"][@"colorIndex"] isEqual:@5];
         });
         assert(!RBWriteSetting(@"enabled", @NO));
+        assert(RBWriteSetting(@"strokeWidth", @17));
+        PumpUntil(^BOOL {
+            return [RBBridgeRequest(Request(@"read"))[@"values"][@"strokeWidth"] isEqual:@17];
+        });
 
         // Healthy Cephei takes precedence, including a successfully empty configuration.
         gCepheiHealthy = YES;

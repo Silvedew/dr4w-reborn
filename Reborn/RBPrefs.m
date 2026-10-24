@@ -1,5 +1,6 @@
 #import "RBPrefs.h"
 #import "RBSettings.h"
+#import "RBStrokeWidth.h"
 
 @implementation RBPrefs
 
@@ -105,11 +106,18 @@
 }
 
 + (CGFloat)lineWidth {
-    return [[self widths][[self widthIndex]] doubleValue];
+    double legacy = RBStrokeWidthFromLegacyIndex([self widthIndex]);
+    id value = RBSetting(@"strokeWidth", nil);
+    return [value isKindOfClass:NSNumber.class] ? RBStrokeWidth([value doubleValue], legacy) : legacy;
+}
+
++ (void)setLineWidth:(CGFloat)width {
+    RBWriteSetting(@"strokeWidth", @(RBStrokeWidth(width, [self lineWidth])));
 }
 
 + (void)setWidthIndex:(NSInteger)index {
     RBWriteSetting(@"widthIndex", @(index));
+    [self setLineWidth:RBStrokeWidthFromLegacyIndex(index)];
 }
 
 + (CGPoint)floatCenter {

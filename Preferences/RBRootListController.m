@@ -4,8 +4,7 @@
 #include <math.h>
 
 static UIImage *RBSettingsIcon(NSString *symbol) {
-    return [[UIImage systemImageNamed:symbol] imageWithTintColor:UIColor.systemBlueColor
-        renderingMode:UIImageRenderingModeAlwaysOriginal];
+    return [[UIImage systemImageNamed:symbol] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
 static BOOL RBNormalApplication(LSApplicationProxy *app) {
@@ -69,8 +68,18 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
     [specifier setProperty:@(value) forKey:@"default"];
     NSString *symbol = @{@"enabled": @RB_PENCIL_SYMBOL, @"homeEnabled": @"house",
         @"volumeShortcutEnabled": @"speaker.wave.2"}[key];
-    if (symbol) [specifier setProperty:RBSettingsIcon(symbol) forKey:@"iconImage"];
+    if (symbol) {
+        [specifier setProperty:RBSettingsIcon(symbol) forKey:@"iconImage"];
+        [specifier setProperty:@YES forKey:@"rbMonochromeIcon"];
+    }
     return specifier;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    if ([[[self specifierAtIndexPath:indexPath] propertyForKey:@"rbMonochromeIcon"] boolValue])
+        cell.imageView.tintColor = UIColor.labelColor;
+    return cell;
 }
 
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
@@ -123,6 +132,7 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
     PSSpecifier *apps = [PSSpecifier preferenceSpecifierNamed:@"App 启用" target:self
         set:NULL get:NULL detail:[RBAppListController class] cell:1 edit:Nil];
     [apps setProperty:RBSettingsIcon(@"app.badge") forKey:@"iconImage"];
+    [apps setProperty:@YES forKey:@"rbMonochromeIcon"];
     [self publishSpecifiers:@[group,
         [self switchNamed:@"启用画板" key:@"enabled" defaultValue:YES], launch,
         [self switchNamed:@"在主屏幕启用" key:@"homeEnabled" defaultValue:YES],

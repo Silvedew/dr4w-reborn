@@ -5,6 +5,7 @@
 #import "RBChrome.h"
 #import "RBIconStyle.h"
 #import "RBToolbarLayout.h"
+#import "RBWidthPopover.h"
 
 #import "ACEDrawingView.h"
 #import <QuartzCore/QuartzCore.h>
@@ -60,7 +61,7 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     UIButton *more = [[RBChromeButton alloc] initWithFrame:CGRectMake(x, gap, size, size)];
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:21 weight:UIImageSymbolWeightSemibold];
     [more setImage:[UIImage systemImageNamed:@"paintpalette" withConfiguration:config] forState:UIControlStateNormal];
-    more.tintColor = UIColor.systemBlueColor;
+    more.tintColor = UIColor.labelColor;
     more.accessibilityLabel = @"更多颜色";
     more.largeContentTitle = more.accessibilityLabel;
     [more addTarget:self action:@selector(moreTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -89,8 +90,13 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     UIView         *_bar;
     UIScrollView   *_barScroll;
     NSArray<UIButton *> *_barButtons;
+    UIButton       *_dragHandle;
+    UIPanGestureRecognizer *_barPan;
+    RBToolbarPosition _toolbarPosition;
+    CGPoint _dragOrigin;
 
     UIButton       *_color;
+    UIButton       *_width;
     UIButton       *_gear;
     UIButton       *_undo;
     UIButton       *_clear;
@@ -104,6 +110,7 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    _toolbarPosition = RBToolbarDefaultPosition();
     self.view.backgroundColor = [UIColor clearColor];
 
     _drawView = [[ACEDrawingView alloc] initWithFrame:self.view.bounds];
@@ -140,6 +147,23 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
 - (void)buildBar {
     _bar = [[RBChromeSurface alloc] initWithFrame:CGRectZero];
     [self.view addSubview:_bar];
+    _dragHandle = [[RBChromeButton alloc] initWithFrame:CGRectZero];
+    _dragHandle.accessibilityLabel = @"移动工具栏";
+    _dragHandle.accessibilityHint = @"拖动调整位置，或使用上下左右移动辅助操作";
+    _dragHandle.largeContentTitle = @"移动工具栏";
+    _dragHandle.accessibilityCustomActions = @[
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向上移动" target:self selector:@selector(moveToolbarUp:)],
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向下移动" target:self selector:@selector(moveToolbarDown:)],
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向左移动" target:self selector:@selector(moveToolbarLeft:)],
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向右移动" target:self selector:@selector(moveToolbarRight:)]];
+    UIView *grip = [[UIView alloc] initWithFrame:CGRectMake(12, 20, 20, 4)];
+    grip.backgroundColor = UIColor.secondaryLabelColor;
+    grip.layer.cornerRadius = 2;
+    grip.userInteractionEnabled = NO;
+    [_dragHandle addSubview:grip];
+    _barPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(dragToolbar:)];
+    [_dragHandle addGestureRecognizer:_barPan];
+    [_bar addSubview:_dragHandle];
     _barScroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
     _barScroll.showsVerticalScrollIndicator = NO;
     _barScroll.showsHorizontalScrollIndicator = NO;
@@ -150,13 +174,13 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     _barScroll.layer.cornerCurve = kCACornerCurveContinuous;
     [_bar addSubview:_barScroll];
     _color = [self barButton:@"circle.fill" label:@"画笔颜色" action:@selector(colorTapped:)];
+    _width = [self barButton:@"lineweight" label:@"画笔粗细" action:@selector(showWidthsFromButton:)];
+    _width.accessibilityValue = [NSString stringWithFormat:@"%.0f 磅", [RBPrefs lineWidth]];
     _gear  = [self barButton:@RB_SETTINGS_SYMBOL label:@"绘图设置" action:@selector(settingsTapped:)];
     _undo  = [self barButton:@"arrow.uturn.backward" label:@"撤销上一笔" action:@selector(undoTapped:)];
     _clear = [self barButton:@"trash" label:@"清空画板" action:@selector(clearTapped:)];
     _close = [self barButton:@"xmark" label:@"关闭画板" action:@selector(closeTapped:)];
-    _gear.tintColor = UIColor.systemBlueColor;
-    _close.tintColor = UIColor.secondaryLabelColor;
-    _barButtons = @[_gear, _undo, _clear, _color, _close];
+    _barButtons = @[_gear, _undo, _clear, _color, _width, _close];
     for (UIButton *button in _barButtons) [_barScroll addSubview:button];
 
     [self updateColorIcon];
@@ -166,18 +190,56 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     [super viewDidLayoutSubviews];
     UIEdgeInsets insets = self.view.safeAreaInsets;
     RBToolbarLayout layout = RBLayoutToolbar(self.view.bounds.size.width, self.view.bounds.size.height,
-        insets.top, insets.left, insets.bottom, insets.right);
+        insets.top, insets.left, insets.bottom, insets.right, _toolbarPosition);
     _bar.frame = CGRectMake(layout.x, layout.y, layout.width, layout.height);
-    _barScroll.frame = _bar.bounds;
-    CGSize content = layout.horizontal ? CGSizeMake(RBToolbarLength, RBToolbarThickness)
-        : CGSizeMake(RBToolbarThickness, RBToolbarLength);
-    if (!CGSizeEqualToSize(_barScroll.contentSize, content)) _barScroll.contentOffset = CGPointZero;
-    _barScroll.contentSize = content;
+    _dragHandle.frame = CGRectMake(RBToolbarPadding, RBToolbarPadding, RBToolbarHandle, RBToolbarHandle);
+    _barScroll.frame = CGRectMake(0, RBToolbarScrollTop, layout.width,
+        MAX(0, layout.height - RBToolbarScrollTop - RBToolbarPadding));
+    _barScroll.contentSize = CGSizeMake(RBToolbarThickness, RBToolbarContentLength);
     for (NSUInteger i = 0; i < _barButtons.count; i++) {
-        CGFloat position = RBToolbarPadding + i * (RBToolbarButton + RBToolbarGap);
-        _barButtons[i].frame = CGRectMake(layout.horizontal ? position : RBToolbarPadding,
-            layout.horizontal ? RBToolbarPadding : position, RBToolbarButton, RBToolbarButton);
+        CGFloat position = i * (RBToolbarButton + RBToolbarGap);
+        _barButtons[i].frame = CGRectMake(RBToolbarPadding, position, RBToolbarButton, RBToolbarButton);
     }
+}
+
+- (void)placeToolbarAt:(CGPoint)origin {
+    UIEdgeInsets insets = self.view.safeAreaInsets;
+    CGSize size = self.view.bounds.size;
+    RBToolbarLayout minimum = RBLayoutToolbar(size.width, size.height,
+        insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){0, 0});
+    RBToolbarLayout maximum = RBLayoutToolbar(size.width, size.height,
+        insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){1, 1});
+    _toolbarPosition = RBToolbarPositionForOrigin(minimum, maximum, origin.x, origin.y, _toolbarPosition);
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
+}
+
+- (void)dragToolbar:(UIPanGestureRecognizer *)gesture {
+    if (gesture.state == UIGestureRecognizerStateBegan) _dragOrigin = _bar.frame.origin;
+    if (gesture.state == UIGestureRecognizerStateBegan || gesture.state == UIGestureRecognizerStateChanged ||
+        gesture.state == UIGestureRecognizerStateEnded) {
+        CGPoint translation = [gesture translationInView:self.view];
+        [self placeToolbarAt:CGPointMake(_dragOrigin.x + translation.x, _dragOrigin.y + translation.y)];
+    }
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    _barPan.enabled = NO;
+    _barPan.enabled = YES;
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+}
+
+- (BOOL)moveToolbarUp:(UIAccessibilityCustomAction *)action {
+    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y - 44)]; return YES;
+}
+- (BOOL)moveToolbarDown:(UIAccessibilityCustomAction *)action {
+    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y + 44)]; return YES;
+}
+- (BOOL)moveToolbarLeft:(UIAccessibilityCustomAction *)action {
+    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x - 44, _bar.frame.origin.y)]; return YES;
+}
+- (BOOL)moveToolbarRight:(UIAccessibilityCustomAction *)action {
+    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x + 44, _bar.frame.origin.y)]; return YES;
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {
@@ -318,7 +380,7 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
                                             handler:^(UIAlertAction *a) { [self colorTapped:nil]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"线条粗细"
                                               style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self showWidths]; }]];
+                                            handler:^(UIAlertAction *a) { [self showWidthsFromButton:self->_gear]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"悬浮球大小"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showBallSize]; }]];
@@ -406,22 +468,24 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     [[RBFloating shared] hideTemporarily];
 }
 
-- (void)showWidths {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"线条粗细"
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray<NSNumber *> *widths = [RBPrefs widths];
-    for (NSUInteger i = 0; i < widths.count; i++) {
-        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%.0f 磅", widths[i].doubleValue]
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *a) {
-            [RBPrefs setWidthIndex:(NSInteger)i];
-            self->_drawView.lineWidth = widths[i].doubleValue;
-        }]];
+- (void)showWidthsFromButton:(UIButton *)sender {
+    if (self.presentedViewController) {
+        [self.presentedViewController dismissViewControllerAnimated:YES completion:^{
+            [self showWidthsFromButton:sender];
+        }];
+        return;
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [self anchor:sheet to:_gear];
-    [self presentViewController:sheet animated:YES completion:nil];
+    __weak typeof(self) weakSelf = self;
+    RBWidthPopover *popover = [[RBWidthPopover alloc] initWithWidth:_drawView.lineWidth change:^(CGFloat width) {
+        __strong typeof(weakSelf) controller = weakSelf;
+        if (!controller) return;
+        controller->_drawView.lineWidth = width;
+        controller->_width.accessibilityValue = [NSString stringWithFormat:@"%.0f 磅", width];
+    } commit:^(CGFloat width) { [RBPrefs setLineWidth:width]; }];
+    popover.popoverPresentationController.sourceView = sender;
+    popover.popoverPresentationController.sourceRect = sender.bounds;
+    popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    [self presentViewController:popover animated:YES completion:nil];
 }
 
 @end

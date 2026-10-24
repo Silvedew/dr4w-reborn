@@ -185,3 +185,33 @@ test('native chrome adapts its material and press feedback to accessibility sett
   assert.doesNotMatch(controller, /SystemThinMaterialLight|colorWithWhite:0\.10/);
   assert.match(source('Reborn/RBFloating.m'), /initWithFrame:_win.bounds usesMaterial:NO/);
 });
+
+test('floating toolbar moves only from its fixed handle and keeps position in the controller', () => {
+  const controller = source('Reborn/RBController.m');
+  assert.match(controller, /\[_dragHandle addGestureRecognizer:_barPan\]/);
+  assert.doesNotMatch(controller, /\[_bar(?:Scroll)? addGestureRecognizer:_barPan\]/);
+  assert.match(controller, /_toolbarPosition = RBToolbarDefaultPosition\(\)/);
+  assert.match(controller, /gesture translationInView:self.view/);
+  assert.match(controller, /RBToolbarPositionForOrigin/);
+  assert.match(controller, /_barScroll.frame = CGRectMake\(0, RBToolbarScrollTop/);
+  const movement = controller.slice(controller.indexOf('- (void)placeToolbarAt:'), controller.indexOf('- (void)traitCollectionDidChange:'));
+  assert.doesNotMatch(movement, /RBWriteSetting|setFloatCenter|NSUserDefaults|animateWithDuration/);
+  assert.equal((controller.match(/initWithName:@"向[上下左右]移动"/g) || []).length, 4);
+  assert.match(source('Shared/RBIconStyle.h'), /RB_SETTINGS_SYMBOL "gearshape"/);
+  assert.match(source('Reborn/RBFloating.m'), /_btn.tintColor = UIColor.labelColor/);
+  assert.doesNotMatch(source('Preferences/RBRootListController.m'), /systemBlueColor/);
+});
+
+test('stroke-width popover updates locally while dragging and commits after interaction', () => {
+  const popover = source('Reborn/RBWidthPopover.m');
+  assert.match(popover, /_slider.minimumValue = 1/);
+  assert.match(popover, /_slider.maximumValue = 30/);
+  const change = popover.slice(popover.indexOf('- (void)widthChanged:'), popover.indexOf('- (void)commitWidth:'));
+  assert.match(change, /_change\(width\)/);
+  assert.doesNotMatch(change, /_commit\(|RBWriteSetting|RBPrefs/);
+  assert.match(popover, /viewWillDisappear:[\s\S]*?\[self commitWidth:nil\]/);
+  assert.match(popover, /accessibilityIncrement[\s\S]*?self.value \+ 1/);
+  assert.match(source('Reborn/RBController.m'), /@\[_gear, _undo, _clear, _color, _width, _close\]/);
+  assert.match(source('Reborn/RBPrefs.m'), /RBSetting\(@"strokeWidth", nil\)/);
+  assert.match(source('Shared/RBSettingsStore.m'), /@"strokeWidth"/);
+});

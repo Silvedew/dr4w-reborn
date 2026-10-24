@@ -20,6 +20,7 @@ static NSMutableDictionary *gIconReads;
 @implementation UIImage
 + (instancetype)systemImageNamed:(NSString *)name { return [self new]; }
 - (instancetype)imageWithTintColor:(id)color renderingMode:(UIImageRenderingMode)mode { return self; }
+- (instancetype)imageWithRenderingMode:(UIImageRenderingMode)mode { return self; }
 + (instancetype)_applicationIconImageForBundleIdentifier:(NSString *)bundleID format:(NSInteger)format scale:(CGFloat)scale {
     if (!gIconReads) gIconReads = [NSMutableDictionary dictionary];
     gIconReads[bundleID] = @([gIconReads[bundleID] integerValue] + 1);
@@ -38,14 +39,20 @@ static NSMutableDictionary *gIconReads;
 @implementation UIColor
 + (instancetype)secondaryLabelColor { return [self new]; }
 + (instancetype)systemBlueColor { return [self new]; }
++ (instancetype)labelColor { return [self new]; }
 @end
 @implementation UILabel
 @end
 @implementation UITableView
 @end
+@implementation UIImageView
+@end
 @implementation UITableViewCell
 - (instancetype)init {
-    if ((self = [super init])) self.textLabel = [UILabel new];
+    if ((self = [super init])) {
+        self.textLabel = [UILabel new];
+        self.imageView = [UIImageView new];
+    }
     return self;
 }
 @end
@@ -160,6 +167,8 @@ int main(void) {
         assert(root.specifiers == rows);
         assert(root.publishCount == 1); // Repeated access must not rebuild the table.
         assert([[root readPreferenceValue:rows[1]] boolValue]);
+        UITableViewCell *pluginCell = [root tableView:nil cellForRowAtIndexPath:[NSIndexPath indexPathWithIndex:1]];
+        assert(pluginCell.imageView.tintColor != nil);
         assert([[rows.lastObject propertyForKey:@"label"] isEqualToString:@"App 启用"]);
         for (PSSpecifier *row in rows) assert(![[row propertyForKey:@"key"] isEqualToString:@"showBall"]);
         for (PSSpecifier *row in rows) {
@@ -220,6 +229,7 @@ int main(void) {
         assert([cell.textLabel.accessibilityLabel containsString:@"test.reader"]);
         NSUInteger notesIndex = [appRows indexOfObject:notes];
         cell = [apps tableView:nil cellForRowAtIndexPath:[NSIndexPath indexPathWithIndex:notesIndex]];
+        assert(cell.imageView.tintColor == nil); // App icons keep their own colors.
         assert([cell.textLabel.attributedText.string isEqualToString:@"Notes"]);
         assert(cell.textLabel.numberOfLines == 1);
         id firstIcon = [notes propertyForKey:@"iconImage"];

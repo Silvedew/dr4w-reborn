@@ -7,7 +7,9 @@
 static BOOL RBWritableDrawingKey(NSString *key, id value) {
     if (![key isKindOfClass:NSString.class]) return NO;
     NSArray *keys = @[@"toolIndex", @"colorIndex", @"hasCustom", @"cR", @"cG", @"cB", @"cA",
-        @"widthIndex", @"floatX", @"floatY", @"ballSize", @"ballAlpha"];
+        @"widthIndex", @"strokeWidth", @"floatX", @"floatY", @"ballSize", @"ballAlpha"];
+    if ([key isEqual:@"strokeWidth"] && value && (![value isKindOfClass:NSNumber.class] ||
+        [value doubleValue] < 1 || [value doubleValue] > 30 || round([value doubleValue]) != [value doubleValue])) return NO;
     return [keys containsObject:key] && (!value ||
         ([value isKindOfClass:NSNumber.class] && isfinite([value doubleValue])));
 }

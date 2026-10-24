@@ -83,6 +83,18 @@ retain the last successful snapshot; a successfully empty enabled-app list still
 disables all apps. Logs `settings.service`, `settings.transport`, and
 `settings.snapshot` distinguish registration, connection, and refresh failures.
 
+The vertical toolbar moves by its top handle and stays inside the current app's
+safe area. It retains a relative position across rotation and Split View resizing
+until the panel is closed; reopening starts at the right-hand center. Short
+windows scroll the six action buttons below the fixed handle. VoiceOver users
+can move the handle through its four directional custom actions.
+
+The stroke-width button between Color and Close opens a numbered 1–30 pt slider
+with a live line preview. Width changes apply immediately; persistence occurs on
+release or dismissal. Legacy five-step width choices are retained until a new
+width is selected. Plugin controls use semantic black/gray colors (white/gray in
+dark appearance), while drawing colors and installed-app icons retain their colors.
+
 ## Where to change things
 
 | Want to change | File |

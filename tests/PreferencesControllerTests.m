@@ -1,7 +1,18 @@
 // Compile the actual controller against a small Preferences/UIKit host.
 // This tests controller-to-table storage, not iPad rendering or PreferenceLoader.
 #define RB_SETTINGS_DOMAIN @"com.dsh.dr4wreborn.controller-tests"
+#import <Foundation/Foundation.h>
+
+// macOS already loads LaunchServices; keep fixtures out of its class namespace.
+static Class RBTestLookupClass(NSString *name) {
+    return NSClassFromString([name isEqualToString:@"LSApplicationWorkspace"]
+        ? @"RBFixtureApplicationWorkspace" : name);
+}
+#define LSApplicationProxy RBFixtureApplicationProxy
+#define LSApplicationWorkspace RBFixtureApplicationWorkspace
+#define NSClassFromString RBTestLookupClass
 #import "../Preferences/RBRootListController.m"
+#undef NSClassFromString
 #include <assert.h>
 
 @implementation UIViewController

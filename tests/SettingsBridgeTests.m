@@ -1,4 +1,5 @@
 // Real CFMessagePort transport between two processes; Cephei failure is simulated.
+#import <Foundation/Foundation.h>
 static NSString *gTestDomain;
 #define RB_SETTINGS_DOMAIN gTestDomain
 #import "RBSettings.h"

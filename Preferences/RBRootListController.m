@@ -2,8 +2,9 @@
 #import "RBSettings.h"
 
 @interface RBSettingsListController : PSListController
-@property (nonatomic, strong) NSArray *rbSpecifiers;
+@property (nonatomic, strong) NSMutableArray *rbSpecifiers;
 - (PSSpecifier *)switchNamed:(NSString *)name key:(NSString *)key defaultValue:(BOOL)value;
+- (void)publishSpecifiers:(NSArray *)specifiers;
 @end
 
 @interface RBAppListController : RBSettingsListController
@@ -12,6 +13,17 @@
 @end
 
 @implementation RBSettingsListController
+- (void)publishSpecifiers:(NSArray *)specifiers {
+    // PSListController builds its table from its own specifier storage.
+    self.rbSpecifiers = [specifiers mutableCopy];
+    [super setSpecifiers:self.rbSpecifiers];
+}
+
+- (void)reloadSpecifiers {
+    self.rbSpecifiers = nil;
+    [super reloadSpecifiers];
+}
+
 - (PSSpecifier *)switchNamed:(NSString *)name key:(NSString *)key defaultValue:(BOOL)value {
     PSSpecifier *specifier = [PSSpecifier preferenceSpecifierNamed:name target:self
         set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:)
@@ -57,7 +69,7 @@
 @end
 
 @implementation RBRootListController
-- (NSArray *)specifiers {
+- (NSMutableArray *)specifiers {
     if (self.rbSpecifiers) return self.rbSpecifiers;
     self.title = @"全局画板";
     PSSpecifier *group = [PSSpecifier groupSpecifierWithName:@"Dr4w Reborn"];
@@ -65,17 +77,17 @@
         forKey:@"footerText"];
     PSSpecifier *apps = [PSSpecifier preferenceSpecifierNamed:@"在哪些 App 启用" target:self
         set:NULL get:NULL detail:[RBAppListController class] cell:1 edit:Nil];
-    self.rbSpecifiers = @[group,
+    [self publishSpecifiers:@[group,
         [self switchNamed:@"启用插件" key:@"enabled" defaultValue:YES],
         [self switchNamed:@"在主屏幕启用" key:@"homeEnabled" defaultValue:YES],
         [self switchNamed:@"音量加→音量减快捷键" key:@"volumeShortcutEnabled" defaultValue:YES],
-        [self switchNamed:@"在已启用的 App 显示圆球" key:@"showBall" defaultValue:NO], apps];
+        [self switchNamed:@"在已启用的 App 显示圆球" key:@"showBall" defaultValue:NO], apps]];
     return self.rbSpecifiers;
 }
 @end
 
 @implementation RBAppListController
-- (NSArray *)specifiers {
+- (NSMutableArray *)specifiers {
     if (self.rbSpecifiers) return self.rbSpecifiers;
     self.title = @"在哪些 App 启用";
     NSMutableArray *specifiers = [NSMutableArray array];
@@ -108,7 +120,7 @@
         [specifiers addObject:specifier];
     }
     if (!apps.count) [group setProperty:@"无法读取已安装 App 列表，请重新打开设置后重试。" forKey:@"footerText"];
-    self.rbSpecifiers = specifiers;
+    [self publishSpecifiers:specifiers];
     return self.rbSpecifiers;
 }
 @end

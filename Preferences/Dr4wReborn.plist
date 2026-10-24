@@ -4,6 +4,7 @@
     <key>bundle</key><string>Dr4wRebornPrefs</string>
     <key>bundlePath</key><string>/var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle</string>
     <key>cell</key><string>PSLinkCell</string>
+    <key>detail</key><string>RBRootListController</string>
     <key>isController</key><true/>
     <key>label</key><string>全局画板</string>
 </dict></dict></plist>

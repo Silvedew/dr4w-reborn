@@ -26,6 +26,8 @@ jobs:
           /tmp/rb-policy-tests
           clang -fobjc-arc -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m -o /tmp/rb-settings-tests
           /tmp/rb-settings-tests
+          clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/PreferencesControllerTests.m -o /tmp/rb-controller-tests
+          /tmp/rb-controller-tests
           plutil -lint Preferences/Info.plist Preferences/Dr4wReborn.plist
 
       - name: Show SDK

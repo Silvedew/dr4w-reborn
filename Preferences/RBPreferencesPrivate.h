@@ -4,6 +4,7 @@
 @interface PSViewController : UIViewController
 @end
 @interface PSListController : PSViewController
+@property (nonatomic, strong) NSMutableArray *specifiers;
 - (void)reloadSpecifiers;
 @end
 @interface PSSpecifier : NSObject

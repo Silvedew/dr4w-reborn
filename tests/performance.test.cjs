@@ -65,12 +65,20 @@ test('Settings entry, preference bundle, and dependency are included in packagin
   const workflow = source('.github/workflows/build.yml');
   const entry = source('Preferences/Dr4wReborn.plist');
   assert.match(entry, /\/var\/jb\/Library\/PreferenceBundles\/Dr4wRebornPrefs.bundle/);
+  assert.match(entry, /<key>detail<\/key><string>RBRootListController<\/string>/);
   assert.match(source('Preferences/Info.plist'), /<string>RBRootListController<\/string>/);
   assert.match(workflow, /Preferences\/RBRootListController.m/);
   assert.match(workflow, /cp Dr4wRebornPrefs Preferences\/Info.plist/);
   assert.match(workflow, /Library\/PreferenceLoader\/Preferences/);
   assert.match(source('control'), /Depends:.*preferenceloader/);
   assert.match(workflow, /Depends:.*preferenceloader/);
+});
+
+test('Settings pages publish rows to PSListController and clear their cache on reload', () => {
+  const controller = source('Preferences/RBRootListController.m');
+  assert.match(controller, /self.rbSpecifiers = \[specifiers mutableCopy\];\s*\[super setSpecifiers:self.rbSpecifiers\];/);
+  assert.match(controller, /self.rbSpecifiers = nil;\s*\[super reloadSpecifiers\];/);
+  assert.equal((controller.match(/\[self publishSpecifiers:/g) || []).length, 2);
 });
 
 test('inactive apps cannot restore the floating window', () => {

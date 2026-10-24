@@ -1,5 +1,12 @@
 #import "RBPreferencesPrivate.h"
 #import "RBSettings.h"
+#import "RBIconStyle.h"
+#include <math.h>
+
+static UIImage *RBSettingsIcon(NSString *symbol) {
+    return [[UIImage systemImageNamed:symbol] imageWithTintColor:UIColor.systemBlueColor
+        renderingMode:UIImageRenderingModeAlwaysOriginal];
+}
 
 static BOOL RBNormalApplication(LSApplicationProxy *app) {
     if ([app respondsToSelector:@selector(isInstalled)] && !app.isInstalled) return NO;
@@ -60,6 +67,9 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
         detail:Nil cell:6 edit:Nil];
     [specifier setProperty:key forKey:@"key"];
     [specifier setProperty:@(value) forKey:@"default"];
+    NSString *symbol = @{@"enabled": @RB_PENCIL_SYMBOL, @"homeEnabled": @"house",
+        @"volumeShortcutEnabled": @"speaker.wave.2"}[key];
+    if (symbol) [specifier setProperty:RBSettingsIcon(symbol) forKey:@"iconImage"];
     return specifier;
 }
 
@@ -102,15 +112,21 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
 - (NSMutableArray *)specifiers {
     if (self.rbSpecifiers) return self.rbSpecifiers;
     self.title = @"全局画板";
-    PSSpecifier *group = [PSSpecifier groupSpecifierWithName:@"Dr4w Reborn"];
-    [group setProperty:@"App 默认不启用。在「App 启用」中开启后，进入该 App 即显示圆球，点击即可打开画板。长按只在本次使用中隐藏圆球。修改立即生效。"
+    PSSpecifier *group = [PSSpecifier groupSpecifierWithName:@"全局画板"];
+    [group setProperty:@"关闭后，所有 App 中的画板与快捷键均停用。"
+        forKey:@"footerText"];
+    PSSpecifier *launch = [PSSpecifier groupSpecifierWithName:@"唤醒方式"];
+    [launch setProperty:@"依次按音量加、音量减，可打开或关闭画板。" forKey:@"footerText"];
+    PSSpecifier *appGroup = [PSSpecifier groupSpecifierWithName:@"应用"];
+    [appGroup setProperty:@"启用 App 后显示圆球，轻点打开画板。长按临时隐藏，再次进入 App 恢复。"
         forKey:@"footerText"];
     PSSpecifier *apps = [PSSpecifier preferenceSpecifierNamed:@"App 启用" target:self
         set:NULL get:NULL detail:[RBAppListController class] cell:1 edit:Nil];
+    [apps setProperty:RBSettingsIcon(@"app.badge") forKey:@"iconImage"];
     [self publishSpecifiers:@[group,
-        [self switchNamed:@"启用插件" key:@"enabled" defaultValue:YES],
+        [self switchNamed:@"启用画板" key:@"enabled" defaultValue:YES], launch,
         [self switchNamed:@"在主屏幕启用" key:@"homeEnabled" defaultValue:YES],
-        [self switchNamed:@"音量加→音量减快捷键" key:@"volumeShortcutEnabled" defaultValue:YES], apps]];
+        [self switchNamed:@"音量快捷键" key:@"volumeShortcutEnabled" defaultValue:YES], appGroup, apps]];
     return self.rbSpecifiers;
 }
 @end
@@ -157,7 +173,9 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
         if (icon) [specifier setProperty:icon forKey:@"iconImage"];
         if ([nameCounts[app[@"name"]] unsignedIntegerValue] > 1) {
             [specifier setProperty:app[@"id"] forKey:@"appSubtitle"];
-            [specifier setProperty:@54 forKey:@"height"];
+            CGFloat height = MAX(54, ceil([UIFont preferredFontForTextStyle:UIFontTextStyleBody].lineHeight +
+                [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2].lineHeight + 18));
+            [specifier setProperty:@(height) forKey:@"height"];
         }
         [specifiers addObject:specifier];
     }
@@ -173,10 +191,12 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
     NSString *subtitle = [specifier propertyForKey:@"appSubtitle"];
     NSMutableAttributedString *text = [[NSMutableAttributedString alloc]
         initWithString:subtitle ? [NSString stringWithFormat:@"%@\n%@", name, subtitle] : name];
-    if (subtitle) [text addAttributes:@{NSFontAttributeName:[UIFont systemFontOfSize:11],
+    if (subtitle) [text addAttributes:@{NSFontAttributeName:[UIFont preferredFontForTextStyle:UIFontTextStyleCaption2],
         NSForegroundColorAttributeName:[UIColor secondaryLabelColor]}
         range:NSMakeRange(name.length + 1, subtitle.length)];
     cell.textLabel.numberOfLines = subtitle ? 2 : 1;
+    cell.textLabel.adjustsFontForContentSizeCategory = YES;
+    cell.textLabel.accessibilityLabel = subtitle ? [NSString stringWithFormat:@"%@，%@", name, subtitle] : name;
     cell.textLabel.attributedText = text;
     return cell;
 }

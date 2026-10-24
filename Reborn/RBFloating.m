@@ -4,6 +4,7 @@
 #import "RBPolicy.h"
 #import "RBIconStyle.h"
 #import "RBDiagnostics.h"
+#import "RBChrome.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -71,20 +72,20 @@
     vc.view.backgroundColor = [UIColor clearColor];
     _win.rootViewController = vc;
 
-    _ball = [[UIView alloc] initWithFrame:_win.bounds];
-    _ball.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.94];
+    _ball = [[RBChromeSurface alloc] initWithFrame:_win.bounds usesMaterial:NO];
     _ball.layer.cornerRadius = size / 2.0;
     _ball.layer.cornerCurve = kCACornerCurveContinuous;
-    _ball.layer.borderWidth = 0.5;
-    _ball.layer.borderColor = [UIColor colorWithWhite:0.0 alpha:0.15].CGColor;
     _ball.clipsToBounds = YES;
     _ball.alpha = [RBPrefs ballAlpha];
     [_win.rootViewController.view addSubview:_ball];
 
-    _btn = [UIButton buttonWithType:UIButtonTypeSystem];
+    _btn = [[RBChromeButton alloc] initWithFrame:CGRectZero];
     _btn.frame = _ball.bounds;
     _btn.backgroundColor = [UIColor clearColor];
-    _btn.tintColor = [UIColor colorWithWhite:0.10 alpha:1.0];
+    _btn.tintColor = UIColor.systemBlueColor;
+    _btn.accessibilityLabel = @"打开全局画板";
+    _btn.accessibilityHint = @"可拖动调整位置，长按临时隐藏";
+    _btn.largeContentTitle = @"全局画板";
     [_btn setImage:[self icon] forState:UIControlStateNormal];
     [_btn addTarget:self action:@selector(tapped) forControlEvents:UIControlEventTouchUpInside];
     [_btn addTarget:self action:@selector(touchedDown)
@@ -106,7 +107,7 @@
 - (UIImage *)icon {
     UIImageSymbolConfiguration *cfg =
         [UIImageSymbolConfiguration configurationWithPointSize:24.0
-                                                        weight:UIImageSymbolWeightMedium];
+                                                        weight:UIImageSymbolWeightSemibold];
     UIImage *img = [UIImage systemImageNamed:@RB_PENCIL_SYMBOL withConfiguration:cfg];
     if (!img) img = [UIImage systemImageNamed:@RB_PENCIL_SYMBOL];
     return img;
@@ -187,6 +188,7 @@
     _ball.frame = CGRectMake(0, 0, size, size);
     _ball.layer.cornerRadius = size / 2.0;
     _btn.frame = _ball.bounds;
+    _btn.layer.cornerRadius = size / 2.0;
     [_btn setImage:[self icon] forState:UIControlStateNormal];
     if (!_snapped) _ball.alpha = [RBPrefs ballAlpha];
 }
@@ -237,9 +239,9 @@
     if (g.state == UIGestureRecognizerStateEnded ||
         g.state == UIGestureRecognizerStateCancelled) {
         /* snap flush to a side and dim, like a screen-edge tab */
-        if (f.origin.x <= 24.0) { f.origin.x = 0.0; _snapped = YES; }
+        if (f.origin.x <= 24.0) { f.origin.x = 8.0; _snapped = YES; }
         else if (f.origin.x >= host.size.width - size - 24.0) {
-            f.origin.x = host.size.width - size;
+            f.origin.x = host.size.width - size - 8.0;
             _snapped = YES;
         } else {
             _snapped = NO;

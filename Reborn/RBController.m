@@ -2,17 +2,35 @@
 #import "RBManager.h"
 #import "RBPrefs.h"
 #import "RBFloating.h"
+#import "RBChrome.h"
+#import "RBIconStyle.h"
+#import "RBToolbarLayout.h"
 
 #import "ACEDrawingView.h"
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 
+static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(28, 28)];
+    UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        CGRect circle = CGRectMake(2, 2, 24, 24);
+        CGContextSetFillColorWithColor(context.CGContext, color.CGColor);
+        CGContextFillEllipseInRect(context.CGContext, circle);
+        CGContextSetStrokeColorWithColor(context.CGContext,
+            [UIColor.labelColor resolvedColorWithTraitCollection:traits].CGColor);
+        CGContextSetLineWidth(context.CGContext, 1);
+        CGContextStrokeEllipseInRect(context.CGContext, circle);
+    }];
+    return [image imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+}
+
 #pragma mark - quick colour palette (4 circles)
 
 @interface RBColorPaletteVC : UIViewController
 @property (nonatomic, strong) NSArray<UIColor *> *colors;
 @property (nonatomic, copy) void (^onPick)(UIColor *color);
+@property (nonatomic, copy) void (^onMore)(void);
 @end
 
 @implementation RBColorPaletteVC
@@ -21,34 +39,36 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor clearColor];
 
-    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:
-                                 [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialLight]];
-    glass.frame = self.view.bounds;
-    glass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    glass.layer.cornerRadius = 16.0;
-    glass.layer.cornerCurve = kCACornerCurveContinuous;
-    glass.clipsToBounds = YES;
-    [self.view addSubview:glass];
-
     CGFloat size = 44.0;
     CGFloat gap = 8.0;
-    CGFloat width = self.colors.count * size + (self.colors.count + 1) * gap;
+    CGFloat width = (self.colors.count + 1) * size + (self.colors.count + 2) * gap;
     self.preferredContentSize = CGSizeMake(width, size + gap * 2.0);
 
     CGFloat x = gap;
     for (NSUInteger i = 0; i < self.colors.count; i++) {
         UIColor *c = self.colors[i];
-        UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
+        UIButton *b = [[RBChromeButton alloc] initWithFrame:CGRectZero];
         b.frame = CGRectMake(x, gap, size, size);
-        b.backgroundColor = c;
-        b.layer.cornerRadius = size / 2.0;
-        b.layer.borderWidth = 1.0;
-        b.layer.borderColor = [UIColor colorWithWhite:0.0 alpha:0.25].CGColor;
+        [b setImage:RBColorSwatch(c, self.traitCollection) forState:UIControlStateNormal];
+        b.accessibilityLabel = @[@"黑色", @"红色", @"蓝色", @"绿色"][i];
+        b.largeContentTitle = b.accessibilityLabel;
         b.tag = (NSInteger)i;
         [b addTarget:self action:@selector(pick:) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:b];
         x += size + gap;
     }
+    UIButton *more = [[RBChromeButton alloc] initWithFrame:CGRectMake(x, gap, size, size)];
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:21 weight:UIImageSymbolWeightSemibold];
+    [more setImage:[UIImage systemImageNamed:@"paintpalette" withConfiguration:config] forState:UIControlStateNormal];
+    more.tintColor = UIColor.systemBlueColor;
+    more.accessibilityLabel = @"更多颜色";
+    more.largeContentTitle = more.accessibilityLabel;
+    [more addTarget:self action:@selector(moreTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:more];
+}
+
+- (void)moreTapped:(UIButton *)sender {
+    [self dismissViewControllerAnimated:YES completion:self.onMore];
 }
 
 - (void)pick:(UIButton *)sender {
@@ -67,6 +87,8 @@
 @implementation RBController {
     ACEDrawingView *_drawView;
     UIView         *_bar;
+    UIScrollView   *_barScroll;
+    NSArray<UIButton *> *_barButtons;
 
     UIButton       *_color;
     UIButton       *_gear;
@@ -101,75 +123,72 @@
 
 #pragma mark - toolbar
 
-- (UIButton *)barButton:(NSString *)symbol action:(SEL)action {
-    UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+- (UIButton *)barButton:(NSString *)symbol label:(NSString *)label action:(SEL)action {
+    UIButton *b = [[RBChromeButton alloc] initWithFrame:CGRectZero];
     UIImageSymbolConfiguration *cfg =
-        [UIImageSymbolConfiguration configurationWithPointSize:24.0
-                                                        weight:UIImageSymbolWeightMedium];
+        [UIImageSymbolConfiguration configurationWithPointSize:21.0
+                                                        weight:UIImageSymbolWeightSemibold];
     UIImage *img = [UIImage systemImageNamed:symbol withConfiguration:cfg];
     if (!img) img = [UIImage systemImageNamed:symbol];
     [b setImage:img forState:UIControlStateNormal];
-    b.tintColor = [UIColor colorWithWhite:0.10 alpha:1.0];
+    b.accessibilityLabel = label;
+    b.largeContentTitle = label;
     [b addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
     return b;
 }
 
 - (void)buildBar {
-    CGFloat bw = 56.0;
-    CGFloat bh = 5.0 * 52.0 + 16.0;
-    CGRect f;
-    f.origin.x = self.view.bounds.size.width - bw - 8.0;
-    f.origin.y = (self.view.bounds.size.height - bh) / 2.0;
-    f.size.width = bw;
-    f.size.height = bh;
-
-    _bar = [[UIVisualEffectView alloc] initWithEffect:
-            [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialLight]];
-    _bar.frame = f;
-    _bar.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
-    _bar.layer.cornerRadius = 18.0;
-    _bar.layer.cornerCurve = kCACornerCurveContinuous;
-    _bar.layer.borderWidth = 0.5;
-    _bar.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.55].CGColor;
-    _bar.clipsToBounds = YES;
-    _bar.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
-                            UIViewAutoresizingFlexibleTopMargin |
-                            UIViewAutoresizingFlexibleBottomMargin;
+    _bar = [[RBChromeSurface alloc] initWithFrame:CGRectZero];
     [self.view addSubview:_bar];
-
-    _color = [self barButton:@"circle.fill" action:@selector(colorTapped:)];
-    _gear  = [self barButton:@"gearshape" action:@selector(settingsTapped:)];
-    _undo  = [self barButton:@"arrow.uturn.backward" action:@selector(undoTapped:)];
-    _clear = [self barButton:@"trash" action:@selector(clearTapped:)];
-    _close = [self barButton:@"xmark.circle.fill" action:@selector(closeTapped:)];
-
-    /* 1 设置 / 2 截图 / 3 返回(撤销) / 4 清屏 / 5 颜色 / 6 关闭 */
-    NSArray<UIButton *> *buttons = @[_gear, _undo, _clear, _color, _close];
-    UIView *content = ((UIVisualEffectView *)_bar).contentView;
-    for (NSUInteger i = 0; i < buttons.count; i++) {
-        UIButton *b = buttons[i];
-        b.frame = CGRectMake(6.0, 8.0 + i * 52.0, 44.0, 44.0);
-        [content addSubview:b];
-    }
+    _barScroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
+    _barScroll.showsVerticalScrollIndicator = NO;
+    _barScroll.showsHorizontalScrollIndicator = NO;
+    _barScroll.delaysContentTouches = NO;
+    _barScroll.directionalLockEnabled = YES;
+    _barScroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    _barScroll.layer.cornerRadius = 22;
+    _barScroll.layer.cornerCurve = kCACornerCurveContinuous;
+    [_bar addSubview:_barScroll];
+    _color = [self barButton:@"circle.fill" label:@"画笔颜色" action:@selector(colorTapped:)];
+    _gear  = [self barButton:@RB_SETTINGS_SYMBOL label:@"绘图设置" action:@selector(settingsTapped:)];
+    _undo  = [self barButton:@"arrow.uturn.backward" label:@"撤销上一笔" action:@selector(undoTapped:)];
+    _clear = [self barButton:@"trash" label:@"清空画板" action:@selector(clearTapped:)];
+    _close = [self barButton:@"xmark" label:@"关闭画板" action:@selector(closeTapped:)];
+    _gear.tintColor = UIColor.systemBlueColor;
+    _close.tintColor = UIColor.secondaryLabelColor;
+    _barButtons = @[_gear, _undo, _clear, _color, _close];
+    for (UIButton *button in _barButtons) [_barScroll addSubview:button];
 
     [self updateColorIcon];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    UIEdgeInsets insets = self.view.safeAreaInsets;
+    RBToolbarLayout layout = RBLayoutToolbar(self.view.bounds.size.width, self.view.bounds.size.height,
+        insets.top, insets.left, insets.bottom, insets.right);
+    _bar.frame = CGRectMake(layout.x, layout.y, layout.width, layout.height);
+    _barScroll.frame = _bar.bounds;
+    CGSize content = layout.horizontal ? CGSizeMake(RBToolbarLength, RBToolbarThickness)
+        : CGSizeMake(RBToolbarThickness, RBToolbarLength);
+    if (!CGSizeEqualToSize(_barScroll.contentSize, content)) _barScroll.contentOffset = CGPointZero;
+    _barScroll.contentSize = content;
+    for (NSUInteger i = 0; i < _barButtons.count; i++) {
+        CGFloat position = RBToolbarPadding + i * (RBToolbarButton + RBToolbarGap);
+        _barButtons[i].frame = CGRectMake(layout.horizontal ? position : RBToolbarPadding,
+            layout.horizontal ? RBToolbarPadding : position, RBToolbarButton, RBToolbarButton);
+    }
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previous {
+    [super traitCollectionDidChange:previous];
+    if (self.isViewLoaded) [self updateColorIcon];
+}
+
 - (void)updateColorIcon {
-    UIColor *c = [RBPrefs color];
-    CGSize s = CGSizeMake(28.0, 28.0);
-    UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:s];
-    UIImage *img = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
-        CGContextRef g = ctx.CGContext;
-        CGRect circle = CGRectMake(2.0, 2.0, 24.0, 24.0);
-        CGContextSetFillColorWithColor(g, c.CGColor);
-        CGContextFillEllipseInRect(g, circle);
-        CGContextSetStrokeColorWithColor(g, [UIColor colorWithWhite:0.0 alpha:0.35].CGColor);
-        CGContextSetLineWidth(g, 1.5);
-        CGContextStrokeEllipseInRect(g, circle);
-    }];
-    [_color setImage:[img imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]
+    [_color setImage:RBColorSwatch([RBPrefs color], self.traitCollection)
             forState:UIControlStateNormal];
+    _color.accessibilityValue = @"当前画笔颜色";
 }
 
 #pragma mark - actions
@@ -219,12 +238,18 @@
         [strongSelf applyColor:color];
         strongSelf->_palette = nil;
     };
+    vc.onMore = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf->_palette = nil;
+        [strongSelf showColorWheel];
+    };
     vc.modalPresentationStyle = UIModalPresentationPopover;
     UIPopoverPresentationController *pop = vc.popoverPresentationController;
     pop.sourceView = _color;
     pop.sourceRect = _color.bounds;
-    pop.permittedArrowDirections = UIPopoverArrowDirectionLeft | UIPopoverArrowDirectionRight;
-    pop.backgroundColor = [UIColor clearColor];
+    pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    pop.backgroundColor = UIColor.secondarySystemBackgroundColor;
 
     _palette = vc;
     [self presentViewController:vc animated:YES completion:^{
@@ -242,7 +267,7 @@
     UIPopoverPresentationController *pop = p.popoverPresentationController;
     pop.sourceView = _color;
     pop.sourceRect = _color.bounds;
-    pop.permittedArrowDirections = UIPopoverArrowDirectionLeft | UIPopoverArrowDirectionRight;
+    pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
 
     _picker = p;
     [self presentViewController:p animated:YES completion:^{

@@ -24,6 +24,8 @@ jobs:
         run: |
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/policy_test.c -o /tmp/rb-policy-tests
           /tmp/rb-policy-tests
+          clang -std=c11 -Wall -Wextra -Werror -IShared tests/toolbar_layout_test.c -o /tmp/rb-toolbar-tests
+          /tmp/rb-toolbar-tests
           clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m tests/FakeHBPreferences.m -o /tmp/rb-settings-tests
           /tmp/rb-settings-tests
           clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/PreferencesControllerTests.m tests/FakeHBPreferences.m -o /tmp/rb-controller-tests

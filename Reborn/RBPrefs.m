@@ -132,7 +132,7 @@
 
 + (CGFloat)ballSize {
     CGFloat v = [RBSetting(@"ballSize", @0) doubleValue];
-    if (v < 40.0 || v > 80.0) v = 56.0;
+    if (v < 44.0 || v > 80.0) v = 56.0;
     return v;
 }
 

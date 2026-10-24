@@ -1,10 +1,11 @@
 import AppKit
 import Foundation
 
-// Match the floating ball's white circle and native pencil symbol.
+// Match the floating ball's white circle, blue accent, and native pencil symbol.
 let output = URL(fileURLWithPath:CommandLine.arguments[1], isDirectory:true)
 let style = try String(contentsOfFile:"Shared/RBIconStyle.h", encoding:.utf8)
 let symbolName = style.components(separatedBy:"\"")[1]
+let accent = NSColor(srgbRed:0, green:122.0/255, blue:1, alpha:1)
 try FileManager.default.createDirectory(at:output, withIntermediateDirectories:true)
 
 for scale in 1...3 {
@@ -20,11 +21,11 @@ for scale in 1...3 {
     let circle = NSBezierPath(ovalIn:NSRect(x:0.5, y:0.5, width:28, height:28))
     NSColor(white:1, alpha:0.94).setFill()
     circle.fill()
-    NSColor(white:0, alpha:0.15).setStroke()
+    accent.withAlphaComponent(0.2).setStroke()
     circle.lineWidth = 0.5
     circle.stroke()
-    let config = NSImage.SymbolConfiguration(pointSize:29 * 24 / 56, weight:.medium)
-        .applying(NSImage.SymbolConfiguration(paletteColors:[NSColor(white:0.1, alpha:1)]))
+    let config = NSImage.SymbolConfiguration(pointSize:29 * 24 / 56, weight:.semibold)
+        .applying(NSImage.SymbolConfiguration(paletteColors:[accent]))
     guard let pencil = NSImage(systemSymbolName:symbolName, accessibilityDescription:nil)?
         .withSymbolConfiguration(config) else { fatalError("Missing floating-ball symbol") }
     let size = pencil.size
@@ -33,6 +34,13 @@ for scale in 1...3 {
     guard let data = bitmap.representation(using:.png, properties:[:]),
         bitmap.colorAt(x:pixels/2, y:pixels/2)!.alphaComponent > 0.5,
         bitmap.colorAt(x:0, y:0)!.alphaComponent < 0.1 else { fatalError("Invalid icon render") }
+    let bluePixels = (0..<pixels).reduce(0) { count, x in
+        count + (0..<pixels).filter { y in
+            guard let color = bitmap.colorAt(x:x, y:y)?.usingColorSpace(.deviceRGB) else { return false }
+            return color.alphaComponent > 0.5 && color.blueComponent > color.redComponent + 0.2
+        }.count
+    }
+    precondition(bluePixels > 8 * scale * scale, "Missing blue pencil in rendered icon")
     let suffix = scale == 1 ? "" : "@\(scale)x"
     try data.write(to:output.appendingPathComponent("Dr4wReborn\(suffix).png"))
     print("Verified icon: \(pixels)x\(pixels) \(symbolName)")

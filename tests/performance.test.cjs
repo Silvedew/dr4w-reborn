@@ -169,3 +169,19 @@ test('injection uses bundle alternatives and initializes UIKit only after reachi
   for (const event of ['loaded', 'initialized', 'toggle.received']) assert.ok(manager.includes(`@"${event}"`));
   assert.match(source('Shared/RBDiagnostics.h'), /RB_BUILD_VERSION/);
 });
+
+test('native chrome adapts its material and press feedback to accessibility settings', () => {
+  const chrome = source('Reborn/RBChrome.m');
+  assert.match(chrome, /UIBlurEffectStyleSystemMaterial/);
+  assert.match(chrome, /UIAccessibilityIsReduceTransparencyEnabled/);
+  assert.match(chrome, /UIAccessibilityReduceTransparencyStatusDidChangeNotification/);
+  assert.match(chrome, /UIAccessibilityContrastHigh/);
+  assert.match(chrome, /UIAccessibilityIsReduceMotionEnabled/);
+  assert.match(chrome, /UIViewAnimationOptionBeginFromCurrentState \| UIViewAnimationOptionAllowUserInteraction/);
+  const controller = source('Reborn/RBController.m');
+  assert.match(controller, /viewDidLayoutSubviews[\s\S]*?safeAreaInsets[\s\S]*?RBLayoutToolbar/);
+  assert.match(controller, /_barScroll.delaysContentTouches = NO/);
+  assert.match(controller, /b.accessibilityLabel = label/);
+  assert.doesNotMatch(controller, /SystemThinMaterialLight|colorWithWhite:0\.10/);
+  assert.match(source('Reborn/RBFloating.m'), /initWithFrame:_win.bounds usesMaterial:NO/);
+});

@@ -19,6 +19,7 @@ static Class RBTestLookupClass(NSString *name) {
 static NSMutableDictionary *gIconReads;
 @implementation UIImage
 + (instancetype)systemImageNamed:(NSString *)name { return [self new]; }
+- (instancetype)imageWithTintColor:(id)color renderingMode:(UIImageRenderingMode)mode { return self; }
 + (instancetype)_applicationIconImageForBundleIdentifier:(NSString *)bundleID format:(NSInteger)format scale:(CGFloat)scale {
     if (!gIconReads) gIconReads = [NSMutableDictionary dictionary];
     gIconReads[bundleID] = @([gIconReads[bundleID] integerValue] + 1);
@@ -31,9 +32,12 @@ static NSMutableDictionary *gIconReads;
 @end
 @implementation UIFont
 + (instancetype)systemFontOfSize:(CGFloat)size { return [self new]; }
++ (instancetype)preferredFontForTextStyle:(NSString *)style { return [self new]; }
+- (CGFloat)lineHeight { return 17; }
 @end
 @implementation UIColor
 + (instancetype)secondaryLabelColor { return [self new]; }
++ (instancetype)systemBlueColor { return [self new]; }
 @end
 @implementation UILabel
 @end
@@ -150,7 +154,7 @@ int main(void) {
         for (NSString *key in @[@"enabledApps", @"showBall"]) assert(RBWriteSetting(key, nil));
         RBRootListController *root = [RBRootListController new];
         NSArray *rows = root.specifiers;
-        assert(rows.count == 5); // Group, three switches, installed-app link.
+        assert(rows.count == 7); // Three sections, three switches, installed-app link.
         assert(root.tableSpecifiers.count == rows.count); // Old code leaves this empty.
         assert(root.publishCount == 1);
         assert(root.specifiers == rows);
@@ -158,6 +162,10 @@ int main(void) {
         assert([[root readPreferenceValue:rows[1]] boolValue]);
         assert([[rows.lastObject propertyForKey:@"label"] isEqualToString:@"App 启用"]);
         for (PSSpecifier *row in rows) assert(![[row propertyForKey:@"key"] isEqualToString:@"showBall"]);
+        for (PSSpecifier *row in rows) {
+            if ([row propertyForKey:@"key"] || [row propertyForKey:@"detailClass"])
+                assert([row propertyForKey:@"iconImage"] != nil);
+        }
         Class detail = [rows.lastObject propertyForKey:@"detailClass"];
         assert(detail == [RBAppListController class]);
 
@@ -208,6 +216,8 @@ int main(void) {
         UITableViewCell *cell = [apps tableView:nil cellForRowAtIndexPath:[NSIndexPath indexPathWithIndex:readerIndex]];
         assert([cell.textLabel.attributedText.string isEqualToString:@"Reader\ntest.reader"]);
         assert(cell.textLabel.numberOfLines == 2);
+        assert(cell.textLabel.adjustsFontForContentSizeCategory);
+        assert([cell.textLabel.accessibilityLabel containsString:@"test.reader"]);
         NSUInteger notesIndex = [appRows indexOfObject:notes];
         cell = [apps tableView:nil cellForRowAtIndexPath:[NSIndexPath indexPathWithIndex:notesIndex]];
         assert([cell.textLabel.attributedText.string isEqualToString:@"Notes"]);
@@ -219,9 +229,9 @@ int main(void) {
         assert([gIconReads[@"test.noicon"] integerValue] == 1);
 
         [root reloadSpecifiers];
-        assert(root.specifiers.count == 5);
+        assert(root.specifiers.count == 7);
         assert(root.publishCount == 2);
-        assert(root.tableSpecifiers.count == 5);
+        assert(root.tableSpecifiers.count == 7);
         gInstalledApps = @[];
         [apps reloadSpecifiers];
         assert(apps.specifiers.count == 1); // A visible explanation, not a blank page.

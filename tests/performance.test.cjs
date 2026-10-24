@@ -186,15 +186,16 @@ test('native chrome adapts its material and press feedback to accessibility sett
   assert.match(source('Reborn/RBFloating.m'), /initWithFrame:_win.bounds usesMaterial:NO/);
 });
 
-test('floating toolbar moves only from its fixed handle and keeps position in the controller', () => {
+test('floating toolbar moves only from its fixed handle and saves per-app position at gesture end', () => {
   const controller = source('Reborn/RBController.m');
   assert.match(controller, /\[_dragHandle addGestureRecognizer:_barPan\]/);
   assert.doesNotMatch(controller, /\[_bar(?:Scroll)? addGestureRecognizer:_barPan\]/);
-  assert.match(controller, /_toolbarPosition = RBToolbarDefaultPosition\(\)/);
+  assert.match(controller, /_toolbarPosition = RBToolbarPositionForApp\(NSBundle.mainBundle.bundleIdentifier\)/);
+  assert.match(controller, /if \(gesture.state == UIGestureRecognizerStateEnded\) \[self saveToolbarPosition\]/);
   assert.match(controller, /gesture translationInView:self.view/);
   assert.match(controller, /RBToolbarPositionForOrigin/);
   assert.match(controller, /_barScroll.frame = CGRectMake\(0, RBToolbarScrollTop/);
-  const movement = controller.slice(controller.indexOf('- (void)placeToolbarAt:'), controller.indexOf('- (void)traitCollectionDidChange:'));
+  const movement = controller.slice(controller.indexOf('- (void)placeToolbarAt:'), controller.indexOf('#pragma mark - actions'));
   assert.doesNotMatch(movement, /RBWriteSetting|setFloatCenter|NSUserDefaults|animateWithDuration/);
   assert.equal((controller.match(/initWithName:@"向[上下左右]移动"/g) || []).length, 4);
   assert.match(source('Shared/RBIconStyle.h'), /RB_SETTINGS_SYMBOL "gearshape"/);
@@ -202,7 +203,7 @@ test('floating toolbar moves only from its fixed handle and keeps position in th
   assert.doesNotMatch(source('Preferences/RBRootListController.m'), /systemBlueColor/);
 });
 
-test('stroke-width popover updates locally while dragging and commits after interaction', () => {
+test('vertical stroke-width control updates locally and commits after interaction', () => {
   const popover = source('Reborn/RBWidthPopover.m');
   assert.match(popover, /_slider.minimumValue = 1/);
   assert.match(popover, /_slider.maximumValue = 30/);
@@ -211,7 +212,25 @@ test('stroke-width popover updates locally while dragging and commits after inte
   assert.doesNotMatch(change, /_commit\(|RBWriteSetting|RBPrefs/);
   assert.match(popover, /viewWillDisappear:[\s\S]*?\[self commitWidth:nil\]/);
   assert.match(popover, /accessibilityIncrement[\s\S]*?self.value \+ 1/);
-  assert.match(source('Reborn/RBController.m'), /@\[_gear, _undo, _clear, _color, _width, _close\]/);
+  assert.match(popover, /CGAffineTransformMakeRotation\(-M_PI_2\)/);
+  assert.match(popover, /CGContextRotateCTM\(context.CGContext, M_PI_2\)/);
+  assert.match(popover, /_scroll.scrollEnabled = NO/);
+  assert.match(popover, /cancelTrackingWithEvent:[\s\S]*?_scroll.scrollEnabled = _restoreScrolling/);
+  assert.match(source('Reborn/RBController.m'), /@\[_gear, _undo, _clear, _brush, _close\]/);
   assert.match(source('Reborn/RBPrefs.m'), /RBSetting\(@"strokeWidth", nil\)/);
   assert.match(source('Shared/RBSettingsStore.m'), /@"strokeWidth"/);
+});
+
+test('brush popover combines color and width without dismissing on selection', () => {
+  const brush = source('Reborn/RBBrushPopover.m');
+  const pick = brush.slice(brush.indexOf('- (void)pick:'), brush.indexOf('- (void)more:'));
+  assert.match(pick, /_colorChange\(_color\)/);
+  assert.doesNotMatch(pick, /dismissViewController/);
+  assert.match(brush, /addChildViewController:_widthController/);
+  assert.match(brush, /_scroll.contentSize/);
+  assert.match(brush, /_checks\[i\].hidden = !selected/);
+  assert.match(brush, /picker.popoverPresentationController.passthroughViews = @\[\]/);
+  const controller = source('Reborn/RBController.m');
+  assert.doesNotMatch(controller, /RBColorPaletteVC|showWidthsFromButton|colorTapped/);
+  assert.match(controller, /popover.popoverPresentationController.passthroughViews = @\[\]/);
 });

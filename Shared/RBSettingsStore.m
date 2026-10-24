@@ -3,6 +3,41 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <math.h>
 
+static BOOL RBValidToolbarApp(id bundleID) {
+    if (![bundleID isKindOfClass:NSString.class] || ![bundleID length] || [bundleID length] > 255) return NO;
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:
+        @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_"];
+    return [bundleID rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound;
+}
+
+static BOOL RBDecodeToolbarPosition(id value, RBToolbarPosition *position) {
+    if (![value isKindOfClass:NSDictionary.class] || [value count] != 2) return NO;
+    id x = value[@"x"], y = value[@"y"];
+    if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class]) return NO;
+    double u = [x doubleValue], v = [y doubleValue];
+    if (!isfinite(u) || !isfinite(v) || u < 0 || u > 1 || v < 0 || v > 1) return NO;
+    if (position) *position = (RBToolbarPosition){u, v};
+    return YES;
+}
+
+// SpringBoard is the only writer of this dictionary, including for system apps.
+static BOOL RBMergeToolbarPosition(NSString *bundleID, NSDictionary *position) {
+    @try {
+        id stored = [RBPreferences() objectForKey:@"toolbarPositions"];
+        NSMutableDictionary *positions = [stored isKindOfClass:NSDictionary.class]
+            ? [stored mutableCopy] : [NSMutableDictionary dictionary];
+        positions[bundleID] = position;
+        NSData *encoded = [NSPropertyListSerialization dataWithPropertyList:positions
+            format:NSPropertyListBinaryFormat_v1_0 options:0 error:NULL];
+        if (!encoded || encoded.length > 128 * 1024) return NO;
+        [RBPreferences() setObject:positions forKey:@"toolbarPositions"];
+        return RBSignalSettingsChanged();
+    } @catch (NSException *exception) {
+        RBDiagnostic(@"settings.position", [NSString stringWithFormat:@"saved=0 exception=%@", exception.name]);
+        return NO;
+    }
+}
+
 // The bridge cannot choose a domain or touch files. Only drawing values are writable.
 static BOOL RBWritableDrawingKey(NSString *key, id value) {
     if (![key isKindOfClass:NSString.class]) return NO;
@@ -37,6 +72,11 @@ static NSDictionary *RBHandleSettingsRequest(NSDictionary *request) {
     if ([operation isEqual:@"read"] && request.count == 2) {
         NSDictionary *values = RBPreferences().dictionaryRepresentation;
         return values ? @{@"values": values} : nil;
+    }
+    if ([operation isEqual:@"toolbarPosition"] && request.count == 5 && RBValidToolbarApp(request[@"bundle"])) {
+        NSDictionary *position = @{@"x": request[@"x"] ?: NSNull.null, @"y": request[@"y"] ?: NSNull.null};
+        if (!RBDecodeToolbarPosition(position, NULL)) return nil;
+        return @{@"saved": @(RBMergeToolbarPosition(request[@"bundle"], position))};
     }
     BOOL remove = [operation isEqual:@"remove"];
     if ((remove || [operation isEqual:@"write"]) && request.count == (remove ? 3 : 4) &&
@@ -130,6 +170,36 @@ static NSDictionary *gSnapshot;
 static NSMutableArray *gSettingsObservers;
 static BOOL gRefreshPending;
 static BOOL gRefreshAgain;
+static NSMutableDictionary *gToolbarPositions;
+
+RBToolbarPosition RBToolbarPositionForApp(NSString *bundleID) {
+    RBToolbarPosition position = RBToolbarDefaultPosition();
+    if (!RBValidToolbarApp(bundleID)) return position;
+    id stored = RBSnapshotValue(@"toolbarPositions");
+    id value = gToolbarPositions[bundleID] ?: ([stored isKindOfClass:NSDictionary.class] ? stored[bundleID] : nil);
+    RBDecodeToolbarPosition(value, &position);
+    return position;
+}
+
+BOOL RBSaveToolbarPosition(NSString *bundleID, RBToolbarPosition position) {
+    NSDictionary *value = @{@"x": @(position.x), @"y": @(position.y)};
+    if (!RBValidToolbarApp(bundleID) || !RBDecodeToolbarPosition(value, NULL)) return NO;
+    if (!gToolbarPositions) gToolbarPositions = [NSMutableDictionary dictionary];
+    gToolbarPositions[bundleID] = value; // Reopening immediately also works while the write is in flight.
+    if ([NSBundle.mainBundle.bundleIdentifier isEqual:@"com.apple.springboard"]) {
+        BOOL saved = RBMergeToolbarPosition(bundleID, value);
+        RBDiagnostic(@"settings.position", saved ? @"saved=1" : @"saved=0");
+        return saved;
+    }
+    dispatch_async(RBSettingsQueue(), ^{
+        NSDictionary *request = @{@"domain": RB_SETTINGS_DOMAIN, @"operation": @"toolbarPosition",
+            @"bundle": bundleID, @"x": value[@"x"], @"y": value[@"y"]};
+        BOOL saved = [RBBridgeRequest(request)[@"saved"] boolValue];
+        RBDiagnostic(@"settings.position", saved ? @"saved=1" : @"saved=0");
+        dispatch_async(dispatch_get_main_queue(), ^{ RBRefreshSettings(); });
+    });
+    return YES;
+}
 
 id RBSnapshotValue(NSString *key) {
     // Privileged processes use Cephei's local cache; app layout never performs IPC.

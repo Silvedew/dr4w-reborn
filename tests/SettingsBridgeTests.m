@@ -68,6 +68,13 @@ int main(int argc, const char *argv[]) {
     @autoreleasepool {
         if (argc > 1) {
             gTestDomain = @(argv[2]);
+            if (strcmp(argv[1], "--verify-position") == 0) {
+                RBToolbarPosition position = RBToolbarPositionForApp(@"test.reader");
+                assert(position.x == 0.2 && position.y == 0.8);
+                position = RBToolbarPositionForApp(@"test.other");
+                assert(position.x == 0.7 && position.y == 0.3);
+                return 0;
+            }
             [RBPreferences() setObject:@[@"tv.danmaku.bilianime"] forKey:@"enabledApps"];
             [RBPreferences() setObject:@3 forKey:@"colorIndex"];
             if (strcmp(argv[1], "--lh-only") == 0) {
@@ -101,6 +108,12 @@ int main(int argc, const char *argv[]) {
         assert(!RBWritableDrawingKey(@"strokeWidth", @31));
         assert(!RBWritableDrawingKey(@"strokeWidth", @1.5));
         assert(!RBHandleSettingsRequest(@{@"domain": gTestDomain, @"operation": @7}));
+        assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"write",
+            @"key": @"toolbarPositions", @"value": @{}}));
+        assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"toolbarPosition",
+            @"bundle": @"test.reader", @"x": @1.1, @"y": @0.2}));
+        assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"toolbarPosition",
+            @"bundle": @"../../file", @"x": @0.1, @"y": @0.2}));
 
         gClientPreferences = [HBPreferencesIPC new];
         __block NSUInteger callbacks = 0;
@@ -120,6 +133,33 @@ int main(int argc, const char *argv[]) {
         PumpUntil(^BOOL {
             return [RBBridgeRequest(Request(@"read"))[@"values"][@"strokeWidth"] isEqual:@17];
         });
+        assert(RBSaveToolbarPosition(@"test.reader", (RBToolbarPosition){0.2,0.8}));
+        assert(RBSaveToolbarPosition(@"test.other", (RBToolbarPosition){0.7,0.3}));
+        assert(RBToolbarPositionForApp(@"test.reader").x == 0.2); // Immediate reopen before acknowledgment.
+        PumpUntil(^BOOL {
+            NSDictionary *positions = RBBridgeRequest(Request(@"read"))[@"values"][@"toolbarPositions"];
+            return [positions[@"test.reader"][@"y"] isEqual:@0.8] && [positions[@"test.other"][@"x"] isEqual:@0.7];
+        });
+        dispatch_group_t writers = dispatch_group_create();
+        for (NSString *bundle in @[@"test.concurrent.a", @"test.concurrent.b"]) {
+            dispatch_group_async(writers, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                assert([RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"toolbarPosition",
+                    @"bundle": bundle, @"x": @0.4, @"y": @0.6})[@"saved"] boolValue]);
+            });
+        }
+        assert(dispatch_group_wait(writers, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) == 0);
+        NSDictionary *positions = RBBridgeRequest(Request(@"read"))[@"values"][@"toolbarPositions"];
+        assert(positions.count == 4 && positions[@"test.concurrent.a"] && positions[@"test.concurrent.b"]);
+        NSTask *verifier = [NSTask new];
+        verifier.executableURL = [NSURL fileURLWithPath:NSProcessInfo.processInfo.arguments[0]];
+        verifier.arguments = @[@"--verify-position", gTestDomain];
+        assert([verifier launchAndReturnError:NULL]);
+        [verifier waitUntilExit];
+        assert(verifier.terminationStatus == 0); // A fresh process reads the persisted, per-app positions.
+        [server terminate]; [server waitUntilExit];
+        server = StartServer(@"--server");
+        positions = RBBridgeRequest(Request(@"read"))[@"values"][@"toolbarPositions"];
+        assert(positions.count == 4); // SpringBoard/server restart retains all apps.
 
         // Healthy Cephei takes precedence, including a successfully empty configuration.
         gCepheiHealthy = YES;
@@ -152,6 +192,8 @@ int main(int argc, const char *argv[]) {
         [server terminate]; [server waitUntilExit];
         Refresh();
         assert(RBBallForBundle(@"tv.danmaku.bilianime")); // Failed read retains last snapshot.
+        assert(RBSaveToolbarPosition(@"test.reader", (RBToolbarPosition){0.3,0.6}));
+        assert(RBToolbarPositionForApp(@"test.reader").x == 0.3); // Failed save keeps current UI position.
         gSnapshot = nil;
         Refresh();
         assert(!gSnapshot && !RBBallForBundle(@"tv.danmaku.bilianime"));

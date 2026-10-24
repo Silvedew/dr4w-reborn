@@ -33,7 +33,7 @@ int main(void) {
     assert(collapsed.y == moved.y); // Resizing back restores the fraction on the collapsed axis.
     assert(RBToolbarDefaultPosition().x == 1 && RBToolbarDefaultPosition().y == 0.5);
     assert(RBToolbarButton >= 44 && RBToolbarHandle >= 44);
-    assert(RBToolbarCount == 6);
+    assert(RBToolbarCount == 5);
     puts("Toolbar dragging, safe bounds, relative resizing, fixed handle, overflow and session defaults passed.");
     return 0;
 }

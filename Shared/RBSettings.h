@@ -3,6 +3,7 @@
 #import <Cephei/HBPreferences.h>
 #import <notify.h>
 #import "RBPolicy.h"
+#import "RBToolbarLayout.h"
 
 #ifndef RB_SETTINGS_DOMAIN
 #define RB_SETTINGS_DOMAIN @"com.dsh.dr4wreborn"
@@ -14,6 +15,8 @@ void RBRefreshSettings(void);
 void RBObserveSnapshot(void (^callback)(void));
 BOOL RBStoreSetting(NSString *key, id value);
 void RBStartSettingsService(void);
+RBToolbarPosition RBToolbarPositionForApp(NSString *bundleID);
+BOOL RBSaveToolbarPosition(NSString *bundleID, RBToolbarPosition position);
 
 static inline HBPreferences *RBPreferences(void) {
     static HBPreferences *preferences;

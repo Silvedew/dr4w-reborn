@@ -3,7 +3,33 @@
 
 @interface RBWidthSlider : UISlider
 @end
-@implementation RBWidthSlider
+@implementation RBWidthSlider {
+    __weak UIScrollView *_scroll;
+    BOOL _restoreScrolling;
+}
+- (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    BOOL tracking = [super beginTrackingWithTouch:touch withEvent:event];
+    if (tracking) {
+        for (UIView *view = self.superview; view; view = view.superview) {
+            if (![view isKindOfClass:UIScrollView.class]) continue;
+            _scroll = (UIScrollView *)view;
+            _restoreScrolling = _scroll.scrollEnabled;
+            _scroll.scrollEnabled = NO;
+            break;
+        }
+    }
+    return tracking;
+}
+- (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    [super endTrackingWithTouch:touch withEvent:event];
+    _scroll.scrollEnabled = _restoreScrolling;
+    _scroll = nil;
+}
+- (void)cancelTrackingWithEvent:(UIEvent *)event {
+    [super cancelTrackingWithEvent:event];
+    _scroll.scrollEnabled = _restoreScrolling;
+    _scroll = nil;
+}
 - (void)accessibilityIncrement {
     self.value = MIN(self.maximumValue, self.value + 1);
     [self sendActionsForControlEvents:UIControlEventValueChanged];
@@ -57,23 +83,22 @@
         _width = RBStrokeWidth(width, 2);
         _change = [change copy];
         _commit = [commit copy];
-        self.preferredContentSize = CGSizeMake(280, 164);
-        self.modalPresentationStyle = UIModalPresentationPopover;
+        self.preferredContentSize = CGSizeMake(180, 300);
     }
     return self;
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.secondarySystemBackgroundColor;
+    self.view.backgroundColor = UIColor.clearColor;
     _title = [[UILabel alloc] initWithFrame:CGRectZero];
-    _title.text = @"画笔粗细";
+    _title.text = @"粗细";
     _title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
     _title.adjustsFontForContentSizeCategory = YES;
     _title.textColor = UIColor.labelColor;
     _value = [[UILabel alloc] initWithFrame:CGRectZero];
     _value.textColor = UIColor.secondaryLabelColor;
     _value.font = [UIFont monospacedDigitSystemFontOfSize:17 weight:UIFontWeightMedium];
-    _value.textAlignment = NSTextAlignmentRight;
+    _value.textAlignment = NSTextAlignmentCenter;
     _value.isAccessibilityElement = NO;
     [self.view addSubview:_title];
     [self.view addSubview:_value];
@@ -101,13 +126,18 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat width = self.view.bounds.size.width;
-    _title.frame = CGRectMake(20, 12, MAX(0, width - 116), 32);
-    _value.frame = CGRectMake(width - 92, 12, 72, 32);
-    _slider.frame = CGRectMake(16, 52, width - 32, 52);
-    CGRect track = [_slider trackRectForBounds:_slider.bounds];
-    _track.frame = CGRectMake(_slider.frame.origin.x + track.origin.x + 16,
-        _slider.frame.origin.y, MAX(0, track.size.width - 32), _slider.bounds.size.height);
-    _preview.frame = CGRectMake(20, 112, width - 40, 36);
+    CGFloat heading = MAX(28, _title.font.lineHeight + 4);
+    CGSize preferred = CGSizeMake(180, heading + 272);
+    if (!CGSizeEqualToSize(preferred, self.preferredContentSize)) self.preferredContentSize = preferred;
+    _title.frame = CGRectMake(12, 8, width - 24, heading);
+    _value.frame = CGRectMake(12, heading + 12, width - 24, 24);
+    _slider.bounds = CGRectMake(0, 0, 168, 52);
+    _slider.center = CGPointMake(width / 2, heading + 124);
+    _slider.transform = CGAffineTransformMakeRotation(-M_PI_2);
+    _track.bounds = CGRectMake(0, 0, 136, 52);
+    _track.center = _slider.center;
+    _track.transform = _slider.transform;
+    _preview.frame = CGRectMake(12, heading + 224, width - 24, 36);
 }
 - (UIImage *)thumb {
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(44, 44)];
@@ -123,7 +153,10 @@
         NSDictionary *attributes = @{NSFontAttributeName:font,
             NSForegroundColorAttributeName:[UIColor.labelColor resolvedColorWithTraitCollection:self.traitCollection]};
         CGSize size = [number sizeWithAttributes:attributes];
-        [number drawAtPoint:CGPointMake((44 - size.width) / 2, (44 - size.height) / 2) withAttributes:attributes];
+        // Counter-rotate the numeral; the slider itself rotates left to make up increase the value.
+        CGContextTranslateCTM(context.CGContext, 22, 22);
+        CGContextRotateCTM(context.CGContext, M_PI_2);
+        [number drawAtPoint:CGPointMake(-size.width / 2, -size.height / 2) withAttributes:attributes];
     }];
 }
 - (void)updateWidth {
@@ -149,6 +182,7 @@
     _dirty = NO;
     if (_commit) _commit(_width);
 }
+- (void)commitPendingWidth { [self commitWidth:nil]; }
 - (void)viewWillDisappear:(BOOL)animated {
     [self commitWidth:nil]; // Also persists VoiceOver changes, which do not produce touch-up events.
     [super viewWillDisappear:animated];

@@ -14,6 +14,19 @@ int main(void) {
         CFPreferencesSynchronize((__bridge CFStringRef)RB_SETTINGS_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         assert(RBEnabledForBundle(@"test.legacy"));
         assert([RBSetting(@"colorIndex", nil) integerValue] == 3);
+        assert(RBWriteSetting(@"toolbarPositions", @{
+            @"test.reader": @{@"x":@0.2, @"y":@0.8},
+            @"test.invalid": @{@"x":@2, @"y":@0},
+            @"test.partial": @{@"x":@0.4}}));
+        RBToolbarPosition storedPosition = RBToolbarPositionForApp(@"test.reader");
+        assert(storedPosition.x == 0.2 && storedPosition.y == 0.8);
+        assert(RBToolbarPositionForApp(@"test.other").x == 1);
+        assert(RBToolbarPositionForApp(@"test.invalid").x == 1);
+        assert(RBToolbarPositionForApp(@"test.partial").y == 0.5);
+        assert(!RBSaveToolbarPosition(@"../invalid", (RBToolbarPosition){0.2,0.3}));
+        assert(!RBSaveToolbarPosition(@"test.reader", (RBToolbarPosition){NAN,0.3}));
+        assert(!RBSaveToolbarPosition(@"test.reader", (RBToolbarPosition){0.2,2}));
+        assert(RBWriteSetting(@"toolbarPositions", nil));
         NSArray *keys = @[@"enabled", @"homeEnabled", @"volumeShortcutEnabled",
             @"showBall", @"enabledApps", @"ballOverrides"];
         for (NSString *key in keys) assert(RBWriteSetting(key, nil));

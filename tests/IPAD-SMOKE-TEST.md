@@ -63,15 +63,22 @@ they do not establish real App Store sandbox/IPC behavior.
     while moving, release keeps the position without snapping, and outside-bar
     gestures continue drawing. Resize Split View and rotate: the toolbar keeps
     its relative position within safe areas and always remains vertical. In short
-    windows, scroll to all six 44-point controls while the handle stays visible.
-    Close/reopen the panel: its position resets to the right-hand center.
+    windows, scroll to all five 44-point controls while the handle stays visible.
+    Close/reopen the panel, quit/reopen the app, and respring: the app's own
+    position is restored. Move a second app's toolbar elsewhere and verify the
+    positions remain independent. No reset-position menu should appear.
     Verify VoiceOver's four directional handle actions. Confirm ball dragging,
     temporary hiding and idle fade timing still behave as before.
 15. Increase text size in Settings, reopen App Enable, and verify duplicate app
     identifiers remain legible, row heights grow, and switches stay operable.
-16. Tap Width between Color and Close. Adjust from 1 to 30: the thumb number,
-    line preview and next drawn stroke must match the chosen integer. Close the
-    popover or lift the finger; reopening the app must retain the width. Repeat
+16. Tap Pencil between Clear and Close. Verify four common colors are vertical,
+    the active color is checked, and selecting a color leaves the panel open.
+    More Colors opens the native picker and returns to this same panel. Drag the
+    vertical slider up/down from 1 to 30: the upright thumb number, line preview
+    and next drawn stroke must match. The parent panel must not scroll during a
+    slider gesture; scrolling blank space must still reveal all controls. Done or
+    an outside tap closes the panel without drawing a dot. Close the popover or
+    lift the finger; reopening the app must retain the width. Repeat
     with VoiceOver's one-point increments and dismissal. An upgrade must preserve
     existing 2/4/7/12/20 pt choices before using the new slider. Check the Settings
     entry's white circle/gray pencil and toolbar gear; installed-app icons and

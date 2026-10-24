@@ -5,85 +5,17 @@
 #import "RBChrome.h"
 #import "RBIconStyle.h"
 #import "RBToolbarLayout.h"
-#import "RBWidthPopover.h"
+#import "RBBrushPopover.h"
+#import "RBSettings.h"
 
 #import "ACEDrawingView.h"
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 
-static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(28, 28)];
-    UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        CGRect circle = CGRectMake(2, 2, 24, 24);
-        CGContextSetFillColorWithColor(context.CGContext, color.CGColor);
-        CGContextFillEllipseInRect(context.CGContext, circle);
-        CGContextSetStrokeColorWithColor(context.CGContext,
-            [UIColor.labelColor resolvedColorWithTraitCollection:traits].CGColor);
-        CGContextSetLineWidth(context.CGContext, 1);
-        CGContextStrokeEllipseInRect(context.CGContext, circle);
-    }];
-    return [image imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-}
-
-#pragma mark - quick colour palette (4 circles)
-
-@interface RBColorPaletteVC : UIViewController
-@property (nonatomic, strong) NSArray<UIColor *> *colors;
-@property (nonatomic, copy) void (^onPick)(UIColor *color);
-@property (nonatomic, copy) void (^onMore)(void);
-@end
-
-@implementation RBColorPaletteVC
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.view.backgroundColor = [UIColor clearColor];
-
-    CGFloat size = 44.0;
-    CGFloat gap = 8.0;
-    CGFloat width = (self.colors.count + 1) * size + (self.colors.count + 2) * gap;
-    self.preferredContentSize = CGSizeMake(width, size + gap * 2.0);
-
-    CGFloat x = gap;
-    for (NSUInteger i = 0; i < self.colors.count; i++) {
-        UIColor *c = self.colors[i];
-        UIButton *b = [[RBChromeButton alloc] initWithFrame:CGRectZero];
-        b.frame = CGRectMake(x, gap, size, size);
-        [b setImage:RBColorSwatch(c, self.traitCollection) forState:UIControlStateNormal];
-        b.accessibilityLabel = @[@"黑色", @"红色", @"蓝色", @"绿色"][i];
-        b.largeContentTitle = b.accessibilityLabel;
-        b.tag = (NSInteger)i;
-        [b addTarget:self action:@selector(pick:) forControlEvents:UIControlEventTouchUpInside];
-        [self.view addSubview:b];
-        x += size + gap;
-    }
-    UIButton *more = [[RBChromeButton alloc] initWithFrame:CGRectMake(x, gap, size, size)];
-    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:21 weight:UIImageSymbolWeightSemibold];
-    [more setImage:[UIImage systemImageNamed:@"paintpalette" withConfiguration:config] forState:UIControlStateNormal];
-    more.tintColor = UIColor.labelColor;
-    more.accessibilityLabel = @"更多颜色";
-    more.largeContentTitle = more.accessibilityLabel;
-    [more addTarget:self action:@selector(moreTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:more];
-}
-
-- (void)moreTapped:(UIButton *)sender {
-    [self dismissViewControllerAnimated:YES completion:self.onMore];
-}
-
-- (void)pick:(UIButton *)sender {
-    UIColor *c = self.colors[(NSUInteger)sender.tag];
-    if (self.onPick) self.onPick(c);
-    [self dismissViewControllerAnimated:YES completion:nil];
-}
-
-@end
 
 #pragma mark - controller
 
-@interface RBController () <UIColorPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate>
-@end
 
 @implementation RBController {
     ACEDrawingView *_drawView;
@@ -95,22 +27,19 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     RBToolbarPosition _toolbarPosition;
     CGPoint _dragOrigin;
 
-    UIButton       *_color;
-    UIButton       *_width;
+    UIButton       *_brush;
     UIButton       *_gear;
     UIButton       *_undo;
     UIButton       *_clear;
     UIButton       *_close;
 
-    RBColorPaletteVC *_palette;
-    UIColorPickerViewController *_picker;
 }
 
 #pragma mark - life cycle
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    _toolbarPosition = RBToolbarDefaultPosition();
+    _toolbarPosition = RBToolbarPositionForApp(NSBundle.mainBundle.bundleIdentifier);
     self.view.backgroundColor = [UIColor clearColor];
 
     _drawView = [[ACEDrawingView alloc] initWithFrame:self.view.bounds];
@@ -173,17 +102,15 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     _barScroll.layer.cornerRadius = 22;
     _barScroll.layer.cornerCurve = kCACornerCurveContinuous;
     [_bar addSubview:_barScroll];
-    _color = [self barButton:@"circle.fill" label:@"画笔颜色" action:@selector(colorTapped:)];
-    _width = [self barButton:@"lineweight" label:@"画笔粗细" action:@selector(showWidthsFromButton:)];
-    _width.accessibilityValue = [NSString stringWithFormat:@"%.0f 磅", [RBPrefs lineWidth]];
+    _brush = [self barButton:@RB_PENCIL_SYMBOL label:@"画笔设置" action:@selector(showBrushFromButton:)];
+    _brush.accessibilityValue = [NSString stringWithFormat:@"粗细 %.0f 磅", [RBPrefs lineWidth]];
     _gear  = [self barButton:@RB_SETTINGS_SYMBOL label:@"绘图设置" action:@selector(settingsTapped:)];
     _undo  = [self barButton:@"arrow.uturn.backward" label:@"撤销上一笔" action:@selector(undoTapped:)];
     _clear = [self barButton:@"trash" label:@"清空画板" action:@selector(clearTapped:)];
     _close = [self barButton:@"xmark" label:@"关闭画板" action:@selector(closeTapped:)];
-    _barButtons = @[_gear, _undo, _clear, _color, _width, _close];
+    _barButtons = @[_gear, _undo, _clear, _brush, _close];
     for (UIButton *button in _barButtons) [_barScroll addSubview:button];
 
-    [self updateColorIcon];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -221,6 +148,11 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
         CGPoint translation = [gesture translationInView:self.view];
         [self placeToolbarAt:CGPointMake(_dragOrigin.x + translation.x, _dragOrigin.y + translation.y)];
     }
+    if (gesture.state == UIGestureRecognizerStateEnded) [self saveToolbarPosition];
+}
+
+- (void)saveToolbarPosition {
+    RBSaveToolbarPosition(NSBundle.mainBundle.bundleIdentifier, _toolbarPosition);
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
@@ -230,28 +162,18 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
 }
 
 - (BOOL)moveToolbarUp:(UIAccessibilityCustomAction *)action {
-    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y - 44)]; return YES;
+[self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y - 44)]; [self saveToolbarPosition]; return YES;
 }
 - (BOOL)moveToolbarDown:(UIAccessibilityCustomAction *)action {
-    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y + 44)]; return YES;
+[self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y + 44)]; [self saveToolbarPosition]; return YES;
 }
 - (BOOL)moveToolbarLeft:(UIAccessibilityCustomAction *)action {
-    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x - 44, _bar.frame.origin.y)]; return YES;
+[self placeToolbarAt:CGPointMake(_bar.frame.origin.x - 44, _bar.frame.origin.y)]; [self saveToolbarPosition]; return YES;
 }
 - (BOOL)moveToolbarRight:(UIAccessibilityCustomAction *)action {
-    [self placeToolbarAt:CGPointMake(_bar.frame.origin.x + 44, _bar.frame.origin.y)]; return YES;
+[self placeToolbarAt:CGPointMake(_bar.frame.origin.x + 44, _bar.frame.origin.y)]; [self saveToolbarPosition]; return YES;
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection *)previous {
-    [super traitCollectionDidChange:previous];
-    if (self.isViewLoaded) [self updateColorIcon];
-}
-
-- (void)updateColorIcon {
-    [_color setImage:RBColorSwatch([RBPrefs color], self.traitCollection)
-            forState:UIControlStateNormal];
-    _color.accessibilityValue = @"当前画笔颜色";
-}
 
 #pragma mark - actions
 
@@ -267,94 +189,6 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     [[RBManager shared] dismiss];
 }
 
-#pragma mark - colour
-
-- (void)colorTapped:(UIButton *)sender {
-    /* palette open -> switch to the full wheel */
-    if (_palette) {
-        RBColorPaletteVC *p = _palette;
-        _palette = nil;
-        [p dismissViewControllerAnimated:NO completion:^{
-            [self showColorWheel];
-        }];
-        return;
-    }
-    if (_picker) {
-        [_picker dismissViewControllerAnimated:YES completion:nil];
-        _picker = nil;
-        return;
-    }
-    [self showPalette];
-}
-
-- (void)showPalette {
-    RBColorPaletteVC *vc = [[RBColorPaletteVC alloc] init];
-    vc.colors = @[[UIColor colorWithWhite:0.05 alpha:1.0],
-                  [UIColor systemRedColor],
-                  [UIColor systemBlueColor],
-                  [UIColor systemGreenColor]];
-    __weak typeof(self) weakSelf = self;
-    vc.onPick = ^(UIColor *color) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        [strongSelf applyColor:color];
-        strongSelf->_palette = nil;
-    };
-    vc.onMore = ^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        strongSelf->_palette = nil;
-        [strongSelf showColorWheel];
-    };
-    vc.modalPresentationStyle = UIModalPresentationPopover;
-    UIPopoverPresentationController *pop = vc.popoverPresentationController;
-    pop.sourceView = _color;
-    pop.sourceRect = _color.bounds;
-    pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
-    pop.backgroundColor = UIColor.secondarySystemBackgroundColor;
-
-    _palette = vc;
-    [self presentViewController:vc animated:YES completion:^{
-        vc.presentationController.delegate = self;
-    }];
-}
-
-- (void)showColorWheel {
-    UIColorPickerViewController *p = [[UIColorPickerViewController alloc] init];
-    p.selectedColor = [RBPrefs color];
-    p.supportsAlpha = NO;
-    p.delegate = self;
-    p.modalPresentationStyle = UIModalPresentationPopover;
-    p.preferredContentSize = CGSizeMake(320.0, 420.0);
-    UIPopoverPresentationController *pop = p.popoverPresentationController;
-    pop.sourceView = _color;
-    pop.sourceRect = _color.bounds;
-    pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
-
-    _picker = p;
-    [self presentViewController:p animated:YES completion:^{
-        p.presentationController.delegate = self;
-    }];
-}
-
-- (void)applyColor:(UIColor *)color {
-    [RBPrefs setCustomColor:color];
-    _drawView.lineColor = color;
-    [self updateColorIcon];
-}
-
-- (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)viewController {
-    [self applyColor:viewController.selectedColor];
-}
-
-- (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)viewController {
-    _picker = nil;
-}
-
-- (void)presentationControllerDidDismiss:(UIPresentationController *)presentationController {
-    if (presentationController.presentedViewController == _palette) _palette = nil;
-    if (presentationController.presentedViewController == _picker) _picker = nil;
-}
 
 #pragma mark - settings
 
@@ -375,12 +209,9 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"工具：%@", [RBPrefs toolName]]
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showTools]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"线条颜色"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"画笔设置"
                                               style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self colorTapped:nil]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"线条粗细"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self showWidthsFromButton:self->_gear]; }]];
+                                            handler:^(UIAlertAction *a) { [self showBrushFromButton:self->_gear]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"悬浮球大小"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *a) { [self showBallSize]; }]];
@@ -468,23 +299,30 @@ static UIImage *RBColorSwatch(UIColor *color, UITraitCollection *traits) {
     [[RBFloating shared] hideTemporarily];
 }
 
-- (void)showWidthsFromButton:(UIButton *)sender {
+- (void)showBrushFromButton:(UIButton *)sender {
     if (self.presentedViewController) {
         [self.presentedViewController dismissViewControllerAnimated:YES completion:^{
-            [self showWidthsFromButton:sender];
+            [self showBrushFromButton:sender];
         }];
         return;
     }
     __weak typeof(self) weakSelf = self;
-    RBWidthPopover *popover = [[RBWidthPopover alloc] initWithWidth:_drawView.lineWidth change:^(CGFloat width) {
-        __strong typeof(weakSelf) controller = weakSelf;
-        if (!controller) return;
-        controller->_drawView.lineWidth = width;
-        controller->_width.accessibilityValue = [NSString stringWithFormat:@"%.0f 磅", width];
-    } commit:^(CGFloat width) { [RBPrefs setLineWidth:width]; }];
+    RBBrushPopover *popover = [[RBBrushPopover alloc] initWithColor:_drawView.lineColor
+        width:_drawView.lineWidth colorChange:^(UIColor *color) {
+            __strong typeof(weakSelf) controller = weakSelf;
+            if (!controller) return;
+            [RBPrefs setCustomColor:color];
+            controller->_drawView.lineColor = color;
+        } widthChange:^(CGFloat width) {
+            __strong typeof(weakSelf) controller = weakSelf;
+            if (!controller) return;
+            controller->_drawView.lineWidth = width;
+            controller->_brush.accessibilityValue = [NSString stringWithFormat:@"粗细 %.0f 磅", width];
+        } widthCommit:^(CGFloat width) { [RBPrefs setLineWidth:width]; }];
     popover.popoverPresentationController.sourceView = sender;
     popover.popoverPresentationController.sourceRect = sender.bounds;
     popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    popover.popoverPresentationController.passthroughViews = @[];
     [self presentViewController:popover animated:YES completion:nil];
 }
 

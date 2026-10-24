@@ -3,7 +3,7 @@
 #include <math.h>
 
 enum { RBToolbarButton = 44, RBToolbarGap = 8, RBToolbarPadding = 8,
-       RBToolbarCount = 6, RBToolbarThickness = 60, RBToolbarHandle = 44,
+       RBToolbarCount = 5, RBToolbarThickness = 60, RBToolbarHandle = 44,
        RBToolbarContentLength = RBToolbarCount * RBToolbarButton + (RBToolbarCount - 1) * RBToolbarGap,
        RBToolbarScrollTop = RBToolbarPadding + RBToolbarHandle + RBToolbarGap,
        RBToolbarLength = RBToolbarScrollTop + RBToolbarContentLength + RBToolbarPadding };

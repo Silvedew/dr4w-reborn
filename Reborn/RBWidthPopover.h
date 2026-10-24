@@ -3,4 +3,5 @@
 
 @interface RBWidthPopover : UIViewController
 - (instancetype)initWithWidth:(CGFloat)width change:(void (^)(CGFloat))change commit:(void (^)(CGFloat))commit;
+- (void)commitPendingWidth;
 @end

@@ -84,15 +84,19 @@ disables all apps. Logs `settings.service`, `settings.transport`, and
 `settings.snapshot` distinguish registration, connection, and refresh failures.
 
 The vertical toolbar moves by its top handle and stays inside the current app's
-safe area. It retains a relative position across rotation and Split View resizing
-until the panel is closed; reopening starts at the right-hand center. Short
-windows scroll the six action buttons below the fixed handle. VoiceOver users
+safe area. Each app retains its own relative position across closing, app restarts,
+respring, rotation and Split View resizing. Apps without a saved position start
+at the right-hand center. Short windows scroll the five action buttons below the fixed handle. VoiceOver users
 can move the handle through its four directional custom actions.
 
-The stroke-width button between Color and Close opens a numbered 1–30 pt slider
-with a live line preview. Width changes apply immediately; persistence occurs on
-release or dismissal. Legacy five-step width choices are retained until a new
-width is selected. Plugin controls use semantic black/gray colors (white/gray in
+The Pencil button opens one vertical panel with four common colors, More Colors,
+and a numbered vertical 1–30 pt slider with a live line preview. Up means thicker.
+Selections leave the panel open; tap Done or outside to close. The system color
+picker returns to this panel. Width changes apply immediately; persistence occurs
+on release or dismissal. Legacy five-step width choices are retained until a new
+width is selected. Toolbar positions are merged by SpringBoard per app only at
+gesture end; generic bridge writes cannot replace the position dictionary.
+Plugin controls use semantic black/gray colors (white/gray in
 dark appearance), while drawing colors and installed-app icons retain their colors.
 
 ## Where to change things

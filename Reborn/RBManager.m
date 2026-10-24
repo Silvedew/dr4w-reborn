@@ -176,10 +176,11 @@ static void RBBootstrap(void) {
         }
         static dispatch_once_t once;
         dispatch_once(&once, ^{
+        if (RBIsSpringBoard()) RBStartSettingsService();
         RBReloadSettings();
         __block BOOL wasEnabled = RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]);
-        RBDiagnostic(@"initialized", [NSString stringWithFormat:@"backend=Cephei enabled=%d keys=%lu state=%ld scenes=%lu",
-            wasEnabled, (unsigned long)RBPreferences().dictionaryRepresentation.count,
+        RBDiagnostic(@"initialized", [NSString stringWithFormat:@"enabled=%d state=%ld scenes=%lu",
+            wasEnabled,
             (long)[UIApplication sharedApplication].applicationState,
             (unsigned long)[UIApplication sharedApplication].connectedScenes.count]);
         RBObserveSettings(^{

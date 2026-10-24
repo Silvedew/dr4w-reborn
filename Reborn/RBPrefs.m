@@ -3,10 +3,6 @@
 
 @implementation RBPrefs
 
-+ (HBPreferences *)defaults {
-    return RBPreferences();
-}
-
 + (NSArray<NSString *> *)toolNames {
     return @[@"钢笔", @"直线", @"箭头", @"矩形", @"实心矩形",
              @"椭圆", @"实心椭圆", @"橡皮", @"文字",
@@ -23,7 +19,7 @@
 }
 
 + (ACEDrawingToolType)tool {
-    NSInteger i = [[self defaults] integerForKey:@"toolIndex"];
+    NSInteger i = [RBSetting(@"toolIndex", @0) integerValue];
     NSArray *types = [self toolTypes];
     if (i < 0 || i >= (NSInteger)types.count) i = 0;
     return (ACEDrawingToolType)[types[i] integerValue];
@@ -33,15 +29,14 @@
     NSArray *types = [self toolTypes];
     for (NSInteger i = 0; i < (NSInteger)types.count; i++) {
         if ([types[i] integerValue] == (NSInteger)tool) {
-            [[self defaults] setInteger:i forKey:@"toolIndex"];
-            RBSignalSettingsChanged();
+            RBWriteSetting(@"toolIndex", @(i));
             return;
         }
     }
 }
 
 + (NSString *)toolName {
-    NSInteger i = [[self defaults] integerForKey:@"toolIndex"];
+    NSInteger i = [RBSetting(@"toolIndex", @0) integerValue];
     NSArray *names = [self toolNames];
     if (i < 0 || i >= (NSInteger)names.count) i = 0;
     return names[i];
@@ -63,7 +58,7 @@
 }
 
 + (NSInteger)colorIndex {
-    NSInteger i = [[self defaults] integerForKey:@"colorIndex"];
+    NSInteger i = [RBSetting(@"colorIndex", @0) integerValue];
     if (i < 0 || i >= (NSInteger)[self colors].count) i = 0;
     return i;
 }
@@ -74,33 +69,29 @@
 }
 
 + (void)setColorIndex:(NSInteger)index {
-    [[self defaults] setBool:NO forKey:@"hasCustom"];
-    [[self defaults] setInteger:index forKey:@"colorIndex"];
-    RBSignalSettingsChanged();
+    RBWriteSetting(@"hasCustom", @NO);
+    RBWriteSetting(@"colorIndex", @(index));
 }
 
 + (BOOL)hasCustomColor {
-    return [[self defaults] boolForKey:@"hasCustom"];
+    return [RBSetting(@"hasCustom", @NO) boolValue];
 }
 
 + (UIColor *)customColor {
-    HBPreferences *d = [self defaults];
-    return [UIColor colorWithRed:[d doubleForKey:@"cR"]
-                           green:[d doubleForKey:@"cG"]
-                            blue:[d doubleForKey:@"cB"]
-                           alpha:[d doubleForKey:@"cA"]];
+    return [UIColor colorWithRed:[RBSetting(@"cR", @0) doubleValue]
+                           green:[RBSetting(@"cG", @0) doubleValue]
+                            blue:[RBSetting(@"cB", @0) doubleValue]
+                           alpha:[RBSetting(@"cA", @1) doubleValue]];
 }
 
 + (void)setCustomColor:(UIColor *)color {
     CGFloat r = 0, g = 0, b = 0, a = 1;
     [color getRed:&r green:&g blue:&b alpha:&a];
-    HBPreferences *d = [self defaults];
-    [d setDouble:r forKey:@"cR"];
-    [d setDouble:g forKey:@"cG"];
-    [d setDouble:b forKey:@"cB"];
-    [d setDouble:a forKey:@"cA"];
-    [d setBool:YES forKey:@"hasCustom"];
-    RBSignalSettingsChanged();
+    RBWriteSetting(@"cR", @(r));
+    RBWriteSetting(@"cG", @(g));
+    RBWriteSetting(@"cB", @(b));
+    RBWriteSetting(@"cA", @(a));
+    RBWriteSetting(@"hasCustom", @YES);
 }
 
 + (NSArray<NSNumber *> *)widths {
@@ -108,7 +99,7 @@
 }
 
 + (NSInteger)widthIndex {
-    NSInteger i = [[self defaults] integerForKey:@"widthIndex"];
+    NSInteger i = [RBSetting(@"widthIndex", @0) integerValue];
     if (i < 0 || i >= (NSInteger)[self widths].count) i = 2;
     return i;
 }
@@ -118,51 +109,45 @@
 }
 
 + (void)setWidthIndex:(NSInteger)index {
-    [[self defaults] setInteger:index forKey:@"widthIndex"];
-    RBSignalSettingsChanged();
+    RBWriteSetting(@"widthIndex", @(index));
 }
 
 + (CGPoint)floatCenter {
-    HBPreferences *d = [self defaults];
-    if (![d objectForKey:@"floatX"]) {
+    if (!RBSetting(@"floatX", nil)) {
         CGSize s = [UIScreen mainScreen].bounds.size;
         return CGPointMake(s.width - 40.0, s.height * 0.35);
     }
     CGPoint p;
-    p.x = [d doubleForKey:@"floatX"];
-    p.y = [d doubleForKey:@"floatY"];
+    p.x = [RBSetting(@"floatX", @0) doubleValue];
+    p.y = [RBSetting(@"floatY", @0) doubleValue];
     return p;
 }
 
 + (void)setFloatCenter:(CGPoint)center {
-    HBPreferences *d = [self defaults];
-    [d setDouble:center.x forKey:@"floatX"];
-    [d setDouble:center.y forKey:@"floatY"];
-    RBSignalSettingsChanged();
+    RBWriteSetting(@"floatX", @(center.x));
+    RBWriteSetting(@"floatY", @(center.y));
 }
 
 #pragma mark - ball
 
 + (CGFloat)ballSize {
-    CGFloat v = [[self defaults] doubleForKey:@"ballSize"];
+    CGFloat v = [RBSetting(@"ballSize", @0) doubleValue];
     if (v < 40.0 || v > 80.0) v = 56.0;
     return v;
 }
 
 + (void)setBallSize:(CGFloat)size {
-    [[self defaults] setDouble:size forKey:@"ballSize"];
-    RBSignalSettingsChanged();
+    RBWriteSetting(@"ballSize", @(size));
 }
 
 + (CGFloat)ballAlpha {
-    CGFloat v = [[self defaults] doubleForKey:@"ballAlpha"];
+    CGFloat v = [RBSetting(@"ballAlpha", @0) doubleValue];
     if (v < 0.3 || v > 1.0) v = 1.0;
     return v;
 }
 
 + (void)setBallAlpha:(CGFloat)alpha {
-    [[self defaults] setDouble:alpha forKey:@"ballAlpha"];
-    RBSignalSettingsChanged();
+    RBWriteSetting(@"ballAlpha", @(alpha));
 }
 
 #pragma mark - per-app switch

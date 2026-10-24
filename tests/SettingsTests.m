@@ -1,5 +1,6 @@
 #define RB_SETTINGS_DOMAIN @"com.dsh.dr4wreborn.ci-tests"
 #import "RBSettings.h"
+#import "../Shared/RBSettingsStore.m"
 #import <CoreFoundation/CoreFoundation.h>
 #include <assert.h>
 

@@ -13,6 +13,7 @@ static Class RBTestLookupClass(NSString *name) {
 #define NSClassFromString RBTestLookupClass
 #import "../Preferences/RBRootListController.m"
 #undef NSClassFromString
+#import "../Shared/RBSettingsStore.m"
 #include <assert.h>
 
 static NSMutableDictionary *gIconReads;

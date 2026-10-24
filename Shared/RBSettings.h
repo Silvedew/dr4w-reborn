@@ -9,6 +9,12 @@
 #endif
 #define RB_SETTINGS_CHANGED "com.dsh.dr4wreborn.settingschanged"
 
+id RBSnapshotValue(NSString *key);
+void RBRefreshSettings(void);
+void RBObserveSnapshot(void (^callback)(void));
+BOOL RBStoreSetting(NSString *key, id value);
+void RBStartSettingsService(void);
+
 static inline HBPreferences *RBPreferences(void) {
     static HBPreferences *preferences;
     static dispatch_once_t once;
@@ -17,7 +23,7 @@ static inline HBPreferences *RBPreferences(void) {
 }
 
 static inline id RBSetting(NSString *key, id fallback) {
-    return [RBPreferences() objectForKey:key] ?: fallback;
+    return RBSnapshotValue(key) ?: fallback;
 }
 
 static inline BOOL RBSettingBool(NSString *key, BOOL fallback) {
@@ -26,8 +32,7 @@ static inline BOOL RBSettingBool(NSString *key, BOOL fallback) {
 }
 
 static inline void RBReloadSettings(void) {
-    // Cephei 2 reloads its cache before delivering preference-change callbacks.
-    (void)RBPreferences();
+    RBRefreshSettings();
 }
 
 static inline BOOL RBSignalSettingsChanged(void) {
@@ -39,8 +44,7 @@ static inline BOOL RBSignalSettingsChanged(void) {
 
 static inline BOOL RBWriteSetting(NSString *key, id value) {
     @try {
-        [RBPreferences() setObject:value forKey:key];
-        return RBSignalSettingsChanged();
+        return RBStoreSetting(key, value);
     } @catch (NSException *exception) {
         NSLog(@"[Dr4wReborn] preference write failed: %@", exception.name);
         return NO;
@@ -48,9 +52,7 @@ static inline BOOL RBWriteSetting(NSString *key, id value) {
 }
 
 static inline void RBObserveSettings(void (^callback)(void)) {
-    [RBPreferences() registerPreferenceChangeBlock:^{
-        dispatch_async(dispatch_get_main_queue(), callback);
-    }];
+    RBObserveSnapshot(callback);
 }
 
 static inline BOOL RBEnabledForBundle(NSString *bundleID) {

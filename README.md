@@ -71,9 +71,17 @@ the enabled third-party apps. Existing settings are kept in the same preference 
 Device stability checks are listed in [tests/IPAD-SMOKE-TEST.md](tests/IPAD-SMOKE-TEST.md).
 
 Diagnostic system-log entries start with `[Dr4wReborn <version>]`. They record
-`loaded`, `initialized` (Cephei backend, enabled state, scene count),
+`loaded`, `initialized` (enabled state, scene count),
 `toggle.received`, and `ball.shown`/`ball.skipped`. They do not include drawing
 content. A process without `UIScene` uses its legacy application window instead.
+
+If Cephei's sandbox IPC is unavailable, apps fetch a cached configuration snapshot
+from this tweak's SpringBoard service (`cy:` / `lh:`). Requests run off the main
+thread with bounded send/receive timeouts. Only this tweak's domain is exposed,
+and remote writes are limited to numeric drawing preferences. Transport failures
+retain the last successful snapshot; a successfully empty enabled-app list still
+disables all apps. Logs `settings.service`, `settings.transport`, and
+`settings.snapshot` distinguish registration, connection, and refresh failures.
 
 ## Where to change things
 

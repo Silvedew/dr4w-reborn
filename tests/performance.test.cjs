@@ -70,9 +70,10 @@ test('temporary hiding survives refresh and resets only on foreground entry or r
 
 test('settings save to a shared domain and notify running apps', () => {
   const settings = source('Shared/RBSettings.h');
-  assert.match(settings, /\[RBPreferences\(\) setObject:value forKey:key\]/);
+  assert.match(settings, /return RBStoreSetting\(key, value\)/);
   assert.match(settings, /stringByAppendingString:@"\/ReloadPrefs"/);
-  assert.match(settings, /registerPreferenceChangeBlock:\^\{\s*dispatch_async\(dispatch_get_main_queue\(\), callback\)/);
+  assert.match(settings, /RBObserveSnapshot\(callback\)/);
+  assert.match(source('Shared/RBSettingsStore.m'), /registerPreferenceChangeBlock:\^\{\s*dispatch_async\(dispatch_get_main_queue\(\)/);
   assert.doesNotMatch(settings, /CFPreferencesCopyValue|CFPreferencesSynchronize|initWithSuiteName/);
   const manager = source('Reborn/RBManager.m');
   assert.match(manager, /RBObserveSettings\(\^\{/);
@@ -131,9 +132,27 @@ test('drawing reuses a renderer, rebuilding it on resize and skipping empty boun
 
 test('drawing preferences use the same sandbox-compatible backend as activation settings', () => {
   const prefs = source('Reborn/RBPrefs.m');
-  assert.match(prefs, /\+ \(HBPreferences \*\)defaults\s*\{\s*return RBPreferences\(\);/);
-  assert.doesNotMatch(prefs, /NSUserDefaults|CFPreferences/);
-  assert.match(prefs, /RBSignalSettingsChanged\(\)/);
+  assert.match(prefs, /RBSetting\(@"toolIndex"/);
+  assert.match(prefs, /RBWriteSetting\(@"toolIndex"/);
+  assert.doesNotMatch(prefs, /NSUserDefaults|CFPreferences|HBPreferences|\[self defaults\]/);
+});
+
+test('sandbox settings use event-driven snapshots and bounded worker-queue transport', () => {
+  const store = source('Shared/RBSettingsStore.m');
+  const refresh = store.slice(store.indexOf('void RBRefreshSettings'), store.indexOf('void RBObserveSnapshot'));
+  assert.match(refresh, /dispatch_async\(RBSettingsQueue\(\),/);
+  assert.match(refresh, /if \(!values\)[\s\S]*?RBBridgeRequest/);
+  assert.match(refresh, /if \(snapshot\) gSnapshot = snapshot/);
+  assert.match(refresh, /if \(gRefreshPending\)/);
+  assert.match(store, /0\.15, 0\.25, kCFRunLoopDefaultMode/);
+  assert.match(store, /@"cy:"/);
+  assert.match(store, /@"lh:"/);
+  assert.match(store, /request\[@"domain"\] isEqual:RB_SETTINGS_DOMAIN/);
+  assert.match(store, /data.length > 256 \* 1024/);
+  const writable = store.slice(store.indexOf('static BOOL RBWritableDrawingKey'), store.indexOf('static NSArray'));
+  assert.doesNotMatch(writable, /enabledApps|@"enabled"|homeEnabled/);
+  assert.doesNotMatch(store, /scheduledTimer|dispatch_after|dictionaryWithContentsOfFile/);
+  assert.match(source('Reborn/RBManager.m'), /if \(RBIsSpringBoard\(\)\) RBStartSettingsService\(\);/);
 });
 
 test('injection uses bundle alternatives and initializes UIKit only after reaching the main queue', () => {

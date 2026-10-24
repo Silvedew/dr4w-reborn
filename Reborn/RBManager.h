@@ -2,7 +2,6 @@
 
 BOOL RBIsSpringBoard(void);
 CGRect RBHostBounds(void);
-BOOL RBFrontmostIsSelf(void);
 
 @interface RBManager : NSObject
 

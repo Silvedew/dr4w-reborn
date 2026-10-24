@@ -17,28 +17,14 @@
     UIButton *_btn;
     BOOL      _userHidden;
     BOOL      _snapped;
-    BOOL      _frontmost;
     NSInteger _fadeGen;
 }
 
 + (instancetype)shared {
     static RBFloating *shared = nil;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        shared = [[RBFloating alloc] init];
-        shared->_frontmost = YES;
-    });
+    dispatch_once(&once, ^{ shared = [[RBFloating alloc] init]; });
     return shared;
-}
-
-- (void)setFrontmost:(BOOL)frontmost {
-    if (_frontmost == frontmost) return;
-    _frontmost = frontmost;
-    if (!frontmost) {
-        _win.hidden = YES;
-    } else if (![[RBManager shared] isShowing]) {
-        [self refreshVisibility];
-    }
 }
 
 - (UIWindowScene *)activeScene {
@@ -118,22 +104,12 @@
     return [RBPrefs isAppDisabled:[[NSBundle mainBundle] bundleIdentifier]];
 }
 
-- (BOOL)sceneActive {
-    if (!_win) return YES;
-    UIWindowScene *ws = (UIWindowScene *)_win.windowScene;
-    if (!ws) return YES;
-    return ws.activationState == UISceneActivationStateForegroundActive;
-}
-
 - (void)show {
     /* SpringBoard never owns a ball: it would float above apps as a dead twin */
     if (RBIsSpringBoard()) { _win.hidden = YES; return; }
     if ([self disabledHere]) { _win.hidden = YES; return; }
-    if (!_frontmost) { _win.hidden = YES; return; }
     @try {
         [self buildIfNeeded];
-        /* split view: only the focused app shows a ball, so there is one */
-        if (![self sceneActive]) { _win.hidden = YES; return; }
         _userHidden = NO;
         _win.hidden = NO;
         [self applyPrefs];

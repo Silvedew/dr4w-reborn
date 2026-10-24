@@ -107,6 +107,11 @@
 - (void)show {
     /* SpringBoard never owns a ball: it would float above apps as a dead twin */
     if (RBIsSpringBoard()) { _win.hidden = YES; return; }
+    if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive) {
+        _win.hidden = YES;
+        return;
+    }
+    if ([[RBManager shared] isShowing]) { _win.hidden = YES; return; }
     if ([self disabledHere]) { _win.hidden = YES; return; }
     @try {
         [self buildIfNeeded];

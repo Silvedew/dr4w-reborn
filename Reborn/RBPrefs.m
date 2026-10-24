@@ -164,25 +164,22 @@ static NSString *const kDomain = @"com.dsh.dr4wreborn";
 
 #pragma mark - per-app switch
 
-+ (NSArray<NSString *> *)disabledApps {
-    NSArray *a = [[self defaults] arrayForKey:@"disabledApps"];
-    return a ?: @[];
-}
-
 + (BOOL)isAppDisabled:(NSString *)bundleID {
-    if (!bundleID) return NO;
-    return [[self disabledApps] containsObject:bundleID];
+    if (!bundleID) return YES;
+    NSArray *enabled = [[self defaults] arrayForKey:@"enabledBallApps"];
+    return ![enabled containsObject:bundleID];
 }
 
 + (void)setAppDisabled:(NSString *)bundleID disabled:(BOOL)disabled {
     if (!bundleID) return;
-    NSMutableArray *list = [[self disabledApps] mutableCopy];
+    NSMutableArray *list = [[[self defaults] arrayForKey:@"enabledBallApps"] mutableCopy];
+    if (!list) list = [NSMutableArray array];
     if (disabled) {
-        if (![list containsObject:bundleID]) [list addObject:bundleID];
-    } else {
         [list removeObject:bundleID];
+    } else {
+        if (![list containsObject:bundleID]) [list addObject:bundleID];
     }
-    [[self defaults] setObject:list forKey:@"disabledApps"];
+    [[self defaults] setObject:list forKey:@"enabledBallApps"];
 }
 
 @end

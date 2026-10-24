@@ -29,7 +29,7 @@ jobs:
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           SRCS=$(find Engine Reborn -name '*.m')
           echo "$SRCS"
-          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IEngine -IReborn -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore"
+          COMMON="-isysroot $SDK -miphoneos-version-min=15.0 -fobjc-arc -O2 -IEngine -IReborn -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore -framework AVFoundation"
           xcrun --sdk iphoneos clang -target arm64-apple-ios15.0  $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64.dylib
           xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 $COMMON -dynamiclib $SRCS -o Dr4wReborn-arm64e.dylib
           lipo -create Dr4wReborn-arm64.dylib Dr4wReborn-arm64e.dylib -output Dr4wReborn.dylib

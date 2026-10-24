@@ -2,25 +2,24 @@
 #import "RBWindow.h"
 #import "RBController.h"
 #import "RBFloating.h"
+#import "RBPrefs.h"
+#import <AVFoundation/AVFoundation.h>
 
 #import <notify.h>
-#import <objc/runtime.h>
-#import <objc/message.h>
 #import <math.h>
 
 #pragma mark - volume source
 
-@interface AVSystemController : NSObject
-+ (id)sharedAVSystemController;
-- (BOOL)getVolume:(float *)volume forCategory:(NSString *)category;
-@end
-
 static float          gLastVolume = -1.0f;
 static NSString      *gBuffer     = @"";
 static NSTimeInterval gLastPress  = 0;
-static NSTimer       *gFastTimer  = nil;
-static NSInteger      gFastGen    = 0;
 static NSTimer       *gLayoutTimer = nil;
+static BOOL           gDeviceLocked = YES;
+
+static BOOL RBMayPresent(void) {
+    if (RBIsSpringBoard()) return !gDeviceLocked;
+    return [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+}
 
 static void RBStopLayoutPolling(void) {
     [gLayoutTimer invalidate];
@@ -28,6 +27,9 @@ static void RBStopLayoutPolling(void) {
 }
 
 static void RBStartLayoutPolling(void) {
+    if (RBIsSpringBoard()) return;
+    if ([RBPrefs isAppDisabled:[[NSBundle mainBundle] bundleIdentifier]] &&
+        ![[RBManager shared] isShowing]) return;
     if (gLayoutTimer) return;
     __block CGRect lastBounds = CGRectNull;
     gLayoutTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
@@ -93,6 +95,7 @@ CGRect RBHostBounds(void) {
 
 - (void)present {
     if ([self isShowing]) return;
+    if (!RBMayPresent()) return;
 
     _previousKey = [UIApplication sharedApplication].keyWindow;
 
@@ -104,12 +107,14 @@ CGRect RBHostBounds(void) {
     w.hidden = NO;
     [w makeKeyAndVisible];
     _window = w;
+    RBStartLayoutPolling();
 
     [[RBFloating shared] hide];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        if (!self->_window) return;
+        if (self->_window != w) return;
+        if (!RBMayPresent()) return;
         [self->_window makeKeyWindow];
         [self->_window setHidden:NO];
     });
@@ -122,10 +127,13 @@ CGRect RBHostBounds(void) {
     _window.rootViewController = nil;
     _window = nil;
 
-    if (_previousKey) [_previousKey makeKeyWindow];
+    if (_previousKey && !_previousKey.hidden &&
+        RBMayPresent())
+        [_previousKey makeKeyWindow];
     _previousKey = nil;
 
     [[RBFloating shared] refreshVisibility];
+    if ([RBPrefs isAppDisabled:[[NSBundle mainBundle] bundleIdentifier]]) RBStopLayoutPolling();
 }
 
 - (void)toggle {
@@ -142,25 +150,14 @@ CGRect RBHostBounds(void) {
 
 #pragma mark - volume trigger
 
-static void RBPollVolume(void);
-
-static void RBStartFastPolling(void) {
-    gFastGen++;
-    NSInteger gen = gFastGen;
-    if (gFastTimer) [gFastTimer invalidate];
-    gFastTimer = [NSTimer scheduledTimerWithTimeInterval:0.12 repeats:YES block:^(NSTimer *timer) {
-        RBPollVolume();
-    }];
-    gFastTimer.tolerance = 0.02;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        if (gen != gFastGen) return;
-        [gFastTimer invalidate];
-        gFastTimer = nil;
-    });
-}
-
 static void RBHandleVolume(float v) {
+    if (!isfinite(v) || v < 0.0f || v > 1.0f) return;
+    if (!RBMayPresent()) {
+        gLastVolume = -1.0f;
+        gBuffer = @"";
+        gLastPress = 0;
+        return;
+    }
     if (gLastVolume < 0) { gLastVolume = v; return; }
     if (fabsf(v - gLastVolume) < 0.004f) return;
 
@@ -172,33 +169,20 @@ static void RBHandleVolume(float v) {
     gLastPress = now;
     gBuffer = [gBuffer stringByAppendingFormat:@"%c", c];
 
-    /* a key was pressed: poll quickly for a moment to catch the partner key */
-    RBStartFastPolling();
-
     if ([gBuffer containsString:@"UD"]) {
         gBuffer = @"";
         [[RBManager shared] toggle];
     }
 }
 
-static void RBPollVolume(void) {
-    Class avc = NSClassFromString(@"AVSystemController");
-    if (!avc) return;
-    id av = ((id (*)(id, SEL))objc_msgSend)((id)avc, sel_registerName("sharedAVSystemController"));
-    if (!av) return;
-
-    float v = -1.0f;
-    BOOL ok = ((BOOL (*)(id, SEL, float *, NSString *))objc_msgSend)(
-                av, sel_registerName("getVolume:forCategory:"), &v, @"Audio/Video");
-    if (!ok || v < 0.0f) return;
-    RBHandleVolume(v);
-}
-
 static void RBVolumeNote(CFNotificationCenterRef center, void *observer,
                          CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     NSDictionary *info = (__bridge NSDictionary *)userInfo;
     NSNumber *n = info[@"AVSystemController_AudioVolumeNotificationParameter"];
-    if (n) RBHandleVolume(n.floatValue);
+    if (![n isKindOfClass:[NSNumber class]]) return;
+    float volume = n.floatValue;
+    // Notification delivery need not originate on the UIKit thread.
+    dispatch_async(dispatch_get_main_queue(), ^{ RBHandleVolume(volume); });
 }
 
 #pragma mark - startup
@@ -222,12 +206,23 @@ static void RBBootstrap(void) {
                                             NULL,
                                             CFNotificationSuspensionBehaviorDeliverImmediately);
 
-            /* Keep a fallback for devices that do not deliver volume notifications. */
-            NSTimer *volumeTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
-                if (gFastTimer) return;
-                RBPollVolume();
-            }];
-            volumeTimer.tolerance = 0.1;
+            // SpringBoard can be inactive while an unlocked app is in front.
+            int lockToken = 0;
+            if (notify_register_dispatch("com.apple.springboard.lockstate", &lockToken,
+                dispatch_get_main_queue(), ^(int t) {
+                    uint64_t state = 1;
+                    if (notify_get_state(t, &state) != NOTIFY_STATUS_OK) return;
+                    gDeviceLocked = state != 0;
+                    gLastVolume = gDeviceLocked ? -1.0f : [AVAudioSession sharedInstance].outputVolume;
+                    gBuffer = @"";
+                    gLastPress = 0;
+                    if (gDeviceLocked) [[RBManager shared] dismiss];
+                }) == NOTIFY_STATUS_OK) {
+                uint64_t state = 1;
+                if (notify_get_state(lockToken, &state) == NOTIFY_STATUS_OK)
+                    gDeviceLocked = state != 0;
+            }
+            if (!gDeviceLocked) gLastVolume = [AVAudioSession sharedInstance].outputVolume;
             return;
         }
 
@@ -244,6 +239,13 @@ static void RBBootstrap(void) {
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
+            [[RBFloating shared] hide];
+            RBStopLayoutPolling();
+        }];
+        [nc addObserverForName:UIApplicationWillResignActiveNotification
+                        object:nil queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+            [[RBManager shared] dismiss];
             [[RBFloating shared] hide];
             RBStopLayoutPolling();
         }];

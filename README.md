@@ -37,7 +37,10 @@ control                 deb metadata
 - Tool / colour / width picker inside the panel (no Preference bundle needed)
 - Screenshot: flattens the drawing onto white and saves a PNG to
   `/var/mobile/Media/Dr4wReborn/`
-- Summon / dismiss with **Volume Up -> Volume Down** (within 0.65 s)
+- Summon / dismiss with **Volume Up -> Volume Down** (within 0.9 s, device unlocked)
+- Floating balls are hidden in every app by default, including after upgrading
+- Locking closes the drawing panel; SpringBoard uses volume notifications instead
+  of polling private audio interfaces
 - Preferences persist between launches
 
 ## Install
@@ -46,6 +49,9 @@ control                 deb metadata
 2. Download the `Dr4wReborn-deb` artifact and install with Sileo/Filza.
 3. Respring.
 4. Press Volume Up, then Volume Down, to open the panel.
+
+After upgrading, respring before testing so SpringBoard unloads the old dylib.
+Device stability checks are listed in [tests/IPAD-SMOKE-TEST.md](tests/IPAD-SMOKE-TEST.md).
 
 ## Where to change things
 

@@ -75,6 +75,8 @@ they do not establish real App Store sandbox/IPC behavior.
     panel uses a single centered column: four unlabeled color circles, a ring on
     the selected slot, the upright width number, and a close icon. The panel
     should share the toolbar's single translucent material layer, with no arrow.
+    Move the toolbar to either side: the panel should open alongside it with
+    clearance, rather than covering its buttons. Repeat after rotation/resizing.
     There must be no panel/color title or More Colors button. Tap an unselected
     color to use it, then tap it again to edit. Native-picker changes must preview
     immediately and persist on closing, replacing that slot across apps, app

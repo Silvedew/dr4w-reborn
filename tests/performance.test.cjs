@@ -229,7 +229,10 @@ test('brush panel shares toolbar chrome without a second material, arrow or widt
   assert.match(brush, /wantsDefaultContentAppearance\s*\{ return NO; \}/);
   assert.equal((brush.match(/\[\[RBChromeSurface alloc\]/g) || []).length, 1);
   assert.match(brush, /self.view.backgroundColor = UIColor.clearColor/);
-  assert.match(controller, /popover.popoverPresentationController.permittedArrowDirections = 0/);
+  assert.match(brush, /arrowBase\s*\{ return 0; \}/);
+  assert.match(brush, /arrowHeight\s*\{ return 0; \}/);
+  assert.match(controller, /popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionLeft \| UIPopoverArrowDirectionRight/);
+  assert.match(controller, /sourceRect = CGRectInset\(sender.bounds, -\(RBToolbarPadding \+ 8\), 0\)/);
   assert.match(brush, /_picker.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny/);
   assert.doesNotMatch(width, /_title|heading|\.text = @"粗细"/);
   assert.match(width, /accessibilityLabel = @"画笔粗细"/);

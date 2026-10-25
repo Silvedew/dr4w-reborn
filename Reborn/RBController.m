@@ -324,8 +324,9 @@
             controller->_brush.accessibilityValue = [NSString stringWithFormat:@"粗细 %.0f 磅", width];
         } widthCommit:^(CGFloat width) { [RBPrefs setLineWidth:width]; }];
     popover.popoverPresentationController.sourceView = sender;
-    popover.popoverPresentationController.sourceRect = sender.bounds;
-    popover.popoverPresentationController.permittedArrowDirections = 0;
+    popover.popoverPresentationController.sourceRect = CGRectInset(sender.bounds, -(RBToolbarPadding + 8), 0);
+    // Zero arrow metrics hide the arrow; keep native side selection beside the toolbar.
+    popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionLeft | UIPopoverArrowDirectionRight;
     popover.popoverPresentationController.passthroughViews = @[];
     [popover updateAvailableSize:UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets).size];
     [self presentViewController:popover animated:YES completion:nil];

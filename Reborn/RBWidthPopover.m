@@ -60,8 +60,9 @@
         CGContextSetStrokeColorWithColor(context, UIColor.labelColor.CGColor);
         CGContextSetLineWidth(context, self.width);
         CGContextSetLineCap(context, kCGLineCapRound);
-        CGContextMoveToPoint(context, 24, self.bounds.size.height / 2);
-        CGContextAddLineToPoint(context, self.bounds.size.width - 24, self.bounds.size.height / 2);
+        CGFloat inset = MIN(24, self.bounds.size.width / 4);
+        CGContextMoveToPoint(context, inset, self.bounds.size.height / 2);
+        CGContextAddLineToPoint(context, self.bounds.size.width - inset, self.bounds.size.height / 2);
         CGContextStrokePath(context);
     }
 }
@@ -75,29 +76,19 @@
     RBWidthSlider *_slider;
     RBWidthPreview *_track;
     RBWidthPreview *_preview;
-    UILabel *_title;
 }
 - (instancetype)initWithWidth:(CGFloat)width change:(void (^)(CGFloat))change commit:(void (^)(CGFloat))commit {
     if ((self = [super initWithNibName:nil bundle:nil])) {
         _width = RBStrokeWidth(width, 2);
         _change = [change copy];
         _commit = [commit copy];
-        self.preferredContentSize = CGSizeMake(80, 208);
+        self.preferredContentSize = CGSizeMake(60, 184);
     }
     return self;
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.clearColor;
-    _title = [[UILabel alloc] initWithFrame:CGRectZero];
-    _title.text = @"粗细";
-    _title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-    _title.textAlignment = NSTextAlignmentCenter;
-    _title.adjustsFontForContentSizeCategory = YES;
-    _title.adjustsFontSizeToFitWidth = YES;
-    _title.minimumScaleFactor = 0.7;
-    _title.textColor = UIColor.labelColor;
-    [self.view addSubview:_title];
     _track = [[RBWidthPreview alloc] initWithFrame:CGRectZero];
     _track.track = YES;
     _track.backgroundColor = UIColor.clearColor;
@@ -122,17 +113,15 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat width = self.view.bounds.size.width;
-    CGFloat heading = MAX(24, _title.font.lineHeight + 4);
-    CGSize preferred = CGSizeMake(80, heading + 184);
+    CGSize preferred = CGSizeMake(60, 184);
     if (!CGSizeEqualToSize(preferred, self.preferredContentSize)) self.preferredContentSize = preferred;
-    _title.frame = CGRectMake(8, 0, width - 16, heading);
     _slider.bounds = CGRectMake(0, 0, 124, 44);
-    _slider.center = CGPointMake(width / 2, heading + 72);
+    _slider.center = CGPointMake(width / 2, 72);
     _slider.transform = CGAffineTransformMakeRotation(-M_PI_2);
     _track.bounds = CGRectMake(0, 0, 92, 44);
     _track.center = _slider.center;
     _track.transform = _slider.transform;
-    _preview.frame = CGRectMake(8, heading + 140, width - 16, 32);
+    _preview.frame = CGRectMake(8, 140, width - 16, 32);
 }
 - (UIImage *)thumb {
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(44, 44)];

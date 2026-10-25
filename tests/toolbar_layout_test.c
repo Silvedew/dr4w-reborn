@@ -26,7 +26,8 @@ int main(void) {
     RBToolbarLayout resized = RBLayoutToolbar(320, 768, 24, 0, 20, 0, moved);
     assert(fabs((resized.x - 12) / (320 - 24 - RBToolbarThickness) - moved.x) < 0.001);
     RBToolbarLayout tiny = RBLayoutToolbar(200, 180, 24, 0, 20, 0, moved);
-    assert(tiny.height - RBToolbarScrollTop - RBToolbarPadding >= 44);
+    assert(tiny.height - RBToolbarScrollTop - RBToolbarGap - RBToolbarHandle - RBToolbarPadding >= 44);
+    assert(RBToolbarScrollTop == RBToolbarPadding);
     RBToolbarLayout lowMin = RBLayoutToolbar(200, 180, 24, 0, 20, 0, (RBToolbarPosition){0,0});
     RBToolbarLayout lowMax = RBLayoutToolbar(200, 180, 24, 0, 20, 0, (RBToolbarPosition){1,1});
     RBToolbarPosition collapsed = RBToolbarPositionForOrigin(lowMin, lowMax, 70, -100, moved);

@@ -3,7 +3,39 @@
 #import "RBWidthPopover.h"
 #import "RBBrushLayout.h"
 #import "RBSettings.h"
+#import <QuartzCore/QuartzCore.h>
 #include <math.h>
+
+// Replace UIKit's popover material so the toolbar chrome is the only background.
+@interface RBBrushBackgroundView : UIPopoverBackgroundView
+@property (nonatomic) CGFloat arrowOffset;
+@property (nonatomic) UIPopoverArrowDirection arrowDirection;
+@end
+@implementation RBBrushBackgroundView {
+    RBChromeSurface *_surface;
+}
+@synthesize arrowOffset = _arrowOffset;
+@synthesize arrowDirection = _arrowDirection;
++ (CGFloat)arrowBase { return 0; }
++ (CGFloat)arrowHeight { return 0; }
++ (UIEdgeInsets)contentViewInsets { return UIEdgeInsetsZero; }
++ (BOOL)wantsDefaultContentAppearance { return NO; }
+- (instancetype)initWithFrame:(CGRect)frame {
+    if ((self = [super initWithFrame:frame])) {
+        self.backgroundColor = UIColor.clearColor;
+        self.opaque = NO;
+        _surface = [[RBChromeSurface alloc] initWithFrame:self.bounds];
+        _surface.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self addSubview:_surface];
+    }
+    return self;
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.layer.shadowOpacity = 0;
+    _surface.frame = self.bounds;
+}
+@end
 
 @interface RBBrushPopover () <UIColorPickerViewControllerDelegate, UIPopoverPresentationControllerDelegate>
 @end
@@ -45,6 +77,8 @@
         self.preferredContentSize = CGSizeMake(RBBrushWidth, RBBrushHeight);
         self.modalPresentationStyle = UIModalPresentationPopover;
         self.popoverPresentationController.delegate = self;
+        self.popoverPresentationController.backgroundColor = UIColor.clearColor;
+        self.popoverPresentationController.popoverBackgroundViewClass = RBBrushBackgroundView.class;
         self.popoverPresentationController.popoverLayoutMargins = UIEdgeInsetsMake(8, 8, 8, 8);
     }
     return self;
@@ -66,7 +100,7 @@
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.secondarySystemBackgroundColor;
+    self.view.backgroundColor = UIColor.clearColor;
     _close = [[RBChromeButton alloc] initWithFrame:CGRectZero];
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightSemibold];
     [_close setImage:[UIImage systemImageNamed:@"xmark" withConfiguration:config] forState:UIControlStateNormal];

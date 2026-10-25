@@ -1,8 +1,9 @@
 #pragma once
+#include "RBToolbarLayout.h"
 #include <math.h>
 #include <stdbool.h>
 
-enum { RBBrushWidth = 80, RBBrushHeight = 468, RBBrushClose = 44,
+enum { RBBrushWidth = RBToolbarThickness, RBBrushHeight = 444, RBBrushClose = 44,
        RBBrushColorCount = 4, RBBrushColorTarget = 44, RBBrushColorGap = 4 };
 typedef struct { double width, height; } RBBrushSize;
 

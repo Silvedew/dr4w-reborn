@@ -5,8 +5,8 @@
 enum { RBToolbarButton = 44, RBToolbarGap = 8, RBToolbarPadding = 8,
        RBToolbarCount = 5, RBToolbarThickness = 60, RBToolbarHandle = 44,
        RBToolbarContentLength = RBToolbarCount * RBToolbarButton + (RBToolbarCount - 1) * RBToolbarGap,
-       RBToolbarScrollTop = RBToolbarPadding + RBToolbarHandle + RBToolbarGap,
-       RBToolbarLength = RBToolbarScrollTop + RBToolbarContentLength + RBToolbarPadding };
+       RBToolbarScrollTop = RBToolbarPadding,
+       RBToolbarLength = RBToolbarScrollTop + RBToolbarContentLength + RBToolbarGap + RBToolbarHandle + RBToolbarPadding };
 
 typedef struct { double x, y; } RBToolbarPosition;
 

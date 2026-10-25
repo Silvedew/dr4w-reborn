@@ -108,7 +108,7 @@
     _undo  = [self barButton:@"arrow.uturn.backward" label:@"撤销上一笔" action:@selector(undoTapped:)];
     _clear = [self barButton:@"trash" label:@"清空画板" action:@selector(clearTapped:)];
     _close = [self barButton:@"xmark" label:@"关闭画板" action:@selector(closeTapped:)];
-    _barButtons = @[_gear, _undo, _clear, _brush, _close];
+    _barButtons = @[_close, _clear, _brush, _undo, _gear];
     for (UIButton *button in _barButtons) [_barScroll addSubview:button];
 
 }
@@ -119,9 +119,10 @@
     RBToolbarLayout layout = RBLayoutToolbar(self.view.bounds.size.width, self.view.bounds.size.height,
         insets.top, insets.left, insets.bottom, insets.right, _toolbarPosition);
     _bar.frame = CGRectMake(layout.x, layout.y, layout.width, layout.height);
-    _dragHandle.frame = CGRectMake(RBToolbarPadding, RBToolbarPadding, RBToolbarHandle, RBToolbarHandle);
+    _dragHandle.frame = CGRectMake(RBToolbarPadding, layout.height - RBToolbarPadding - RBToolbarHandle,
+        RBToolbarHandle, RBToolbarHandle);
     _barScroll.frame = CGRectMake(0, RBToolbarScrollTop, layout.width,
-        MAX(0, layout.height - RBToolbarScrollTop - RBToolbarPadding));
+        MAX(0, layout.height - RBToolbarScrollTop - RBToolbarGap - RBToolbarHandle - RBToolbarPadding));
     _barScroll.contentSize = CGSizeMake(RBToolbarThickness, RBToolbarContentLength);
     for (NSUInteger i = 0; i < _barButtons.count; i++) {
         CGFloat position = i * (RBToolbarButton + RBToolbarGap);
@@ -324,7 +325,7 @@
         } widthCommit:^(CGFloat width) { [RBPrefs setLineWidth:width]; }];
     popover.popoverPresentationController.sourceView = sender;
     popover.popoverPresentationController.sourceRect = sender.bounds;
-    popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    popover.popoverPresentationController.permittedArrowDirections = 0;
     popover.popoverPresentationController.passthroughViews = @[];
     [popover updateAvailableSize:UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets).size];
     [self presentViewController:popover animated:YES completion:nil];

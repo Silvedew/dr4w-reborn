@@ -83,18 +83,21 @@ retain the last successful snapshot; a successfully empty enabled-app list still
 disables all apps. Logs `settings.service`, `settings.transport`, and
 `settings.snapshot` distinguish registration, connection, and refresh failures.
 
-The vertical toolbar moves by its top handle and stays inside the current app's
+The vertical toolbar moves by its fixed bottom handle and stays inside the current app's
 safe area. Each app retains its own relative position across closing, app restarts,
 respring, rotation and Split View resizing. Apps without a saved position start
-at the right-hand center. Short windows scroll the five action buttons below the fixed handle. VoiceOver users
+at the right-hand center. Its scrollable actions run from Close through Clear,
+Pencil, Undo and Settings; short windows keep the handle fixed while the actions
+scroll above it. VoiceOver users
 can move the handle through its four directional custom actions.
 
-The Pencil button opens an 80 pt wide vertical panel with four icon-only color
+The Pencil button opens a 60 pt wide vertical panel with four icon-only color
 slots and a numbered vertical 1–30 pt slider with a live line preview. Up means
 thicker. Tap a color to use it; tap the selected slot again to edit it in the
 system picker. Edits preview immediately and save on picker dismissal, replacing
 that slot for all apps. There is no More Colors button. Selections leave the
-panel open; tap the centered close icon or outside to close. The system picker
+panel open; tap the centered close icon or outside to close. The panel shares
+the toolbar's translucent material and accessibility fallbacks. The system picker
 returns to this panel. Split View keeps both presentations as bounded popovers
 rather than adapting them into a large sheet. Width changes apply immediately; persistence occurs
 on release or dismissal. Legacy five-step width choices are retained until a new

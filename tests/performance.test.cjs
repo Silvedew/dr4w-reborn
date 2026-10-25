@@ -216,9 +216,27 @@ test('vertical stroke-width control updates locally and commits after interactio
   assert.match(popover, /CGContextRotateCTM\(context.CGContext, M_PI_2\)/);
   assert.match(popover, /_scroll.scrollEnabled = NO/);
   assert.match(popover, /cancelTrackingWithEvent:[\s\S]*?_scroll.scrollEnabled = _restoreScrolling/);
-  assert.match(source('Reborn/RBController.m'), /@\[_gear, _undo, _clear, _brush, _close\]/);
+  assert.match(source('Reborn/RBController.m'), /@\[_close, _clear, _brush, _undo, _gear\]/);
   assert.match(source('Reborn/RBPrefs.m'), /RBSetting\(@"strokeWidth", nil\)/);
   assert.match(source('Shared/RBSettingsStore.m'), /@"strokeWidth"/);
+});
+
+test('brush panel shares toolbar chrome without a second material, arrow or width heading', () => {
+  const brush = source('Reborn/RBBrushPopover.m');
+  const width = source('Reborn/RBWidthPopover.m');
+  const controller = source('Reborn/RBController.m');
+  assert.match(brush, /popoverBackgroundViewClass = RBBrushBackgroundView.class/);
+  assert.match(brush, /wantsDefaultContentAppearance\s*\{ return NO; \}/);
+  assert.equal((brush.match(/\[\[RBChromeSurface alloc\]/g) || []).length, 1);
+  assert.match(brush, /self.view.backgroundColor = UIColor.clearColor/);
+  assert.match(controller, /popover.popoverPresentationController.permittedArrowDirections = 0/);
+  assert.match(brush, /_picker.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny/);
+  assert.doesNotMatch(width, /_title|heading|\.text = @"粗细"/);
+  assert.match(width, /accessibilityLabel = @"画笔粗细"/);
+  assert.match(width, /CGSizeMake\(60, 184\)/);
+  assert.match(width, /CGFloat inset = MIN\(24, self.bounds.size.width \/ 4\)/);
+  assert.match(controller, /_dragHandle.frame = CGRectMake\(RBToolbarPadding, layout.height - RBToolbarPadding - RBToolbarHandle/);
+  assert.match(controller, /layout.height - RBToolbarScrollTop - RBToolbarGap - RBToolbarHandle - RBToolbarPadding/);
 });
 
 test('compact brush popover uses centered icon slots and edits only the selected slot', () => {

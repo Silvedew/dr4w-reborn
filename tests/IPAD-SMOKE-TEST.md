@@ -59,11 +59,11 @@ they do not establish real App Store sandbox/IPC behavior.
     legible over a busy app. Enable Reduce Transparency and Increase Contrast:
     toolbar material becomes solid and its boundary remains clear. Enable Reduce
     Motion: button feedback must not scale. Verify VoiceOver announces each action.
-14. Move the toolbar using its 44-point top handle. Verify buttons do not trigger
+14. Move the toolbar using its fixed 44-point bottom handle. Verify buttons do not trigger
     while moving, release keeps the position without snapping, and outside-bar
     gestures continue drawing. Resize Split View and rotate: the toolbar keeps
     its relative position within safe areas and always remains vertical. In short
-    windows, scroll to all five 44-point controls while the handle stays visible.
+    windows, scroll to all five 44-point controls above the handle, which stays visible.
     Close/reopen the panel, quit/reopen the app, and respring: the app's own
     position is restored. Move a second app's toolbar elsewhere and verify the
     positions remain independent. No reset-position menu should appear.
@@ -71,9 +71,10 @@ they do not establish real App Store sandbox/IPC behavior.
     temporary hiding and idle fade timing still behave as before.
 15. Increase text size in Settings, reopen App Enable, and verify duplicate app
     identifiers remain legible, row heights grow, and switches stay operable.
-16. Tap Pencil between Clear and Close. Verify the approximately 80-point wide
+16. Tap Pencil between Clear and Undo. Verify the 60-point wide
     panel uses a single centered column: four unlabeled color circles, a ring on
-    the selected slot, the width heading and upright number, and a close icon.
+    the selected slot, the upright width number, and a close icon. The panel
+    should share the toolbar's single translucent material layer, with no arrow.
     There must be no panel/color title or More Colors button. Tap an unselected
     color to use it, then tap it again to edit. Native-picker changes must preview
     immediately and persist on closing, replacing that slot across apps, app

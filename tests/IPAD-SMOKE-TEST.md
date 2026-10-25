@@ -81,17 +81,27 @@ they do not establish real App Store sandbox/IPC behavior.
     color to use it, then tap it again to edit. Native-picker changes must preview
     immediately and persist on closing, replacing that slot across apps, app
     restarts and respring. Duplicate slot colors must still select only one slot.
-    Narrow Split View must keep both panels as popovers inside the app; shrinking
+    Narrow Split View must keep the brush panel and native picker inside the app; shrinking
     height scrolls content without widening or turning it into a large sheet. Drag the
     vertical slider up/down from 1 to 30: the upright thumb number, line preview
     and next drawn stroke must match. The parent panel must not scroll during a
     slider gesture; scrolling blank space must still reveal all controls. Close or
-    an outside tap closes the panel without drawing a dot. Close the popover or
+    an outside tap closes only the panel without drawing a dot or activating a toolbar button. Close the panel or
     lift the finger; reopening the app must retain the width. Repeat
     with VoiceOver's one-point increments and dismissal. An upgrade must preserve
     existing 2/4/7/12/20 pt choices before using the new slider. Check the Settings
     entry's white circle/gray pencil and toolbar gear; installed-app icons and
     selected ink colors must keep their colors.
+    Compare both bars over the same uniform light, dark and colored backgrounds:
+    material tint and translucency should match, and all four panel corners must
+    stay transparent without white wedges, including while opening/closing and
+    rotating. Repeat Reduce Transparency and Increase Contrast; both surfaces
+    must use the same solid fallback, while their outer shadows remain intact.
+    With VoiceOver, focus stays inside the panel, Escape closes it, and focus
+    returns to the triggering button. While changing width or previewing a picker
+    color, close drawing through the volume shortcut, lock, or switch apps;
+    reopening must retain changes. Closing the native picker must keep the brush
+    panel open and operable.
 
 17. With drawing closed and only the floating ball visible, repeatedly rotate
     portrait to landscape, landscape left to right, and reverse midway through

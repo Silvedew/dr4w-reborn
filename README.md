@@ -97,9 +97,10 @@ thicker. Tap a color to use it; tap the selected slot again to edit it in the
 system picker. Edits preview immediately and save on picker dismissal, replacing
 that slot for all apps. There is no More Colors button. Selections leave the
 panel open; tap the centered close icon or outside to close. The panel shares
-the toolbar's translucent material and accessibility fallbacks. The system picker
-returns to this panel. Split View keeps both presentations as bounded popovers
-rather than adapting them into a large sheet. Width changes apply immediately; persistence occurs
+the toolbar's translucent material and accessibility fallbacks in the same view
+hierarchy, without a system popover shell. The system picker returns to this panel.
+Split View keeps the panel inside the safe area and the system picker as a bounded
+popover rather than a large sheet. Width changes apply immediately; persistence occurs
 on release or dismissal. Legacy five-step width choices are retained until a new
 width is selected. Toolbar positions are merged by SpringBoard per app only at
 gesture end; generic bridge writes cannot replace the position dictionary.

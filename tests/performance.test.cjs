@@ -221,18 +221,21 @@ test('vertical stroke-width control updates locally and commits after interactio
   assert.match(source('Shared/RBSettingsStore.m'), /@"strokeWidth"/);
 });
 
-test('brush panel shares toolbar chrome without a second material, arrow or width heading', () => {
+test('brush panel uses toolbar chrome in the same hierarchy without a system shell', () => {
   const brush = source('Reborn/RBBrushPopover.m');
   const width = source('Reborn/RBWidthPopover.m');
   const controller = source('Reborn/RBController.m');
-  assert.match(brush, /popoverBackgroundViewClass = RBBrushBackgroundView.class/);
-  assert.match(brush, /wantsDefaultContentAppearance\s*\{ return NO; \}/);
+  assert.doesNotMatch(brush, /RBBrushBackgroundView|wantsDefaultContentAppearance|self.modalPresentationStyle|self.popoverPresentationController/);
   assert.equal((brush.match(/\[\[RBChromeSurface alloc\]/g) || []).length, 1);
-  assert.match(brush, /self.view.backgroundColor = UIColor.clearColor/);
-  assert.match(brush, /arrowBase\s*\{ return 0; \}/);
-  assert.match(brush, /arrowHeight\s*\{ return 0; \}/);
-  assert.match(controller, /popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionLeft \| UIPopoverArrowDirectionRight/);
-  assert.match(controller, /sourceRect = CGRectInset\(sender.bounds, -\(RBToolbarPadding \+ 8\), 0\)/);
+  assert.match(brush, /loadView[\s\S]*?self.view = \[\[RBChromeSurface alloc\] initWithFrame:CGRectZero\]/);
+  assert.doesNotMatch(brush, /self.view.backgroundColor\s*=|self.view.clipsToBounds\s*=\s*YES/);
+  assert.match(brush, /self.view.opaque = NO/);
+  assert.match(brush, /_content.clipsToBounds = YES/);
+  assert.match(brush, /_content.layer.cornerRadius = self.view.layer.cornerRadius/);
+  assert.match(brush, /_content.layer.cornerCurve = self.view.layer.cornerCurve/);
+  assert.match(controller, /\[self addChildViewController:_brushPanel\][\s\S]*?\[self.view addSubview:_brushPanel.view\][\s\S]*?\[_brushPanel didMoveToParentViewController:self\]/);
+  assert.doesNotMatch(controller, /presentViewController:(?:popover|_brushPanel)|popover.popoverPresentationController/);
+  assert.match(controller, /RBBrushFrameForHost/);
   assert.match(brush, /_picker.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny/);
   assert.doesNotMatch(width, /_title|heading|\.text = @"粗细"/);
   assert.match(width, /accessibilityLabel = @"画笔粗细"/);
@@ -240,6 +243,30 @@ test('brush panel shares toolbar chrome without a second material, arrow or widt
   assert.match(width, /CGFloat inset = MIN\(24, self.bounds.size.width \/ 4\)/);
   assert.match(controller, /_dragHandle.frame = CGRectMake\(RBToolbarPadding, layout.height - RBToolbarPadding - RBToolbarHandle/);
   assert.match(controller, /layout.height - RBToolbarScrollTop - RBToolbarGap - RBToolbarHandle - RBToolbarPadding/);
+});
+
+test('embedded brush dismissal consumes outside taps, commits edits and removes containment', () => {
+  const controller = source('Reborn/RBController.m');
+  const brush = source('Reborn/RBBrushPopover.m');
+  assert.match(controller, /_brushDismissArea = \[\[UIControl alloc\] initWithFrame:self.view.bounds\]/);
+  assert.match(controller, /_brushDismissArea.backgroundColor = UIColor.clearColor/);
+  assert.match(controller, /_brushDismissArea.opaque = NO/);
+  assert.match(controller, /addTarget:self action:@selector\(closeBrushPanel\) forControlEvents:UIControlEventTouchUpInside/);
+  assert.ok(controller.indexOf('[self.view addSubview:_brushDismissArea]') < controller.indexOf('[self.view addSubview:_brushPanel.view]'));
+  assert.match(controller, /closeHandler = \^\{ \[weakSelf closeBrushPanel\]; \}/);
+  const close = controller.slice(controller.indexOf('- (void)closeBrushPanel'));
+  assert.match(close, /commitPendingChanges[\s\S]*?dismissViewControllerAnimated:NO[\s\S]*?willMoveToParentViewController:nil[\s\S]*?removeFromSuperview[\s\S]*?removeFromParentViewController/);
+  assert.match(close, /\[_brushDismissArea removeFromSuperview\]/);
+  assert.match(brush, /commitPendingChanges\s*\{\s*\[self commitColor\];\s*\[_widthController commitPendingWidth\];/);
+  assert.match(brush, /viewWillDisappear:[\s\S]*?\[self commitPendingChanges\]/);
+  assert.match(brush, /self.view.accessibilityViewIsModal = YES/);
+  assert.match(brush, /accessibilityPerformEscape[\s\S]*?self.closeHandler\(\)/);
+  assert.match(controller, /UIAccessibilityScreenChangedNotification, _brushPanel.view/);
+  assert.match(close, /self.view.window && !self.view.window.hidden[\s\S]*?UIAccessibilityScreenChangedNotification, anchor/);
+  const manager = source('Reborn/RBManager.m');
+  const start = manager.indexOf('- (void)dismiss {');
+  const teardown = manager.slice(start, manager.indexOf('- (void)toggle {', start));
+  assert.match(teardown, /rootViewController.childViewControllers[\s\S]*?RBBrushPopover.class[\s\S]*?commitPendingChanges[\s\S]*?_window.hidden = YES[\s\S]*?_window.rootViewController = nil/);
 });
 
 test('floating ball stays transparent and uses rotation-safe placement and dragging', () => {
@@ -269,7 +296,7 @@ test('floating ball stays transparent and uses rotation-safe placement and dragg
   assert.match(source('.github/workflows/build.yml'), /tests\/floating_layout_test.c/);
 });
 
-test('compact brush popover uses centered icon slots and edits only the selected slot', () => {
+test('compact brush panel retains centered color slots and the native picker', () => {
   const brush = source('Reborn/RBBrushPopover.m');
   const pick = brush.slice(brush.indexOf('- (void)pick:'), brush.indexOf('- (void)editColor:'));
   assert.match(pick, /_colorChange\(_color\)/);
@@ -283,12 +310,13 @@ test('compact brush popover uses centered icon slots and edits only the selected
   assert.match(brush, /picker.popoverPresentationController.passthroughViews = @\[\]/);
   assert.equal((brush.match(/return UIModalPresentationNone;/g) || []).length, 2);
   assert.match(brush, /_picker.popoverPresentationController.delegate = self/);
-  assert.match(brush, /presentationControllerDidDismiss:[\s\S]*?\[self commitColor\]/);
+  assert.match(brush, /presentationControllerDidDismiss:[\s\S]*?\[self commitPendingChanges\]/);
   const preview = brush.slice(brush.indexOf('- (void)colorPickerViewControllerDidSelectColor:'), brush.indexOf('- (void)colorPickerViewControllerDidFinish:'));
   assert.doesNotMatch(preview, /RBSaveBrushColor|commitColor/);
   const controller = source('Reborn/RBController.m');
   assert.doesNotMatch(controller, /RBColorPaletteVC|showWidthsFromButton|colorTapped/);
   assert.doesNotMatch(controller, /setCustomColor:color/);
   assert.match(controller, /updateAvailableSize:/);
-  assert.match(controller, /popover.popoverPresentationController.passthroughViews = @\[\]/);
+  assert.match(brush, /\[self presentViewController:_picker animated:YES completion:nil\]/);
+  assert.match(brush, /colorPickerViewControllerDidFinish:[\s\S]*?\[picker dismissViewControllerAnimated:YES/);
 });

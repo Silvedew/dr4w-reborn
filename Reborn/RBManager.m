@@ -1,6 +1,7 @@
 #import "RBManager.h"
 #import "RBWindow.h"
 #import "RBController.h"
+#import "RBBrushPopover.h"
 #import "RBFloating.h"
 #import "RBPrefs.h"
 #import "RBSystemHooks.h"
@@ -133,6 +134,9 @@ CGRect RBHostBounds(void) {
 - (void)dismiss {
     if (!_window) return;
 
+    for (UIViewController *child in _window.rootViewController.childViewControllers) {
+        if ([child isKindOfClass:RBBrushPopover.class]) [(RBBrushPopover *)child commitPendingChanges];
+    }
     _window.hidden = YES;
     _window.rootViewController = nil;
     _window = nil;

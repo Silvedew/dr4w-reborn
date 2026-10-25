@@ -6,6 +6,7 @@
 #import "RBIconStyle.h"
 #import "RBToolbarLayout.h"
 #import "RBBrushPopover.h"
+#import "RBBrushLayout.h"
 #import "RBSettings.h"
 
 #import "ACEDrawingView.h"
@@ -32,6 +33,9 @@
     UIButton       *_undo;
     UIButton       *_clear;
     UIButton       *_close;
+    RBBrushPopover *_brushPanel;
+    UIControl      *_brushDismissArea;
+    __weak UIButton *_brushAnchor;
 
 }
 
@@ -128,10 +132,18 @@
         CGFloat position = i * (RBToolbarButton + RBToolbarGap);
         _barButtons[i].frame = CGRectMake(RBToolbarPadding, position, RBToolbarButton, RBToolbarButton);
     }
-    if ([self.presentedViewController isKindOfClass:RBBrushPopover.class]) {
-        [(RBBrushPopover *)self.presentedViewController updateAvailableSize:
-            UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets).size];
-    }
+    [self layoutBrushPanel];
+}
+
+- (void)layoutBrushPanel {
+    if (!_brushPanel) return;
+    CGRect safe = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
+    CGRect anchor = [_brushAnchor convertRect:_brushAnchor.bounds toView:self.view];
+    RBBrushFrame frame = RBBrushFrameForHost(safe.origin.x, safe.origin.y,
+        safe.size.width, safe.size.height, _bar.frame.origin.x, _bar.frame.size.width, CGRectGetMidY(anchor));
+    [_brushPanel updateAvailableSize:safe.size];
+    _brushDismissArea.frame = self.view.bounds;
+    _brushPanel.view.frame = CGRectMake(frame.x, frame.y, frame.width, frame.height);
 }
 
 - (void)placeToolbarAt:(CGPoint)origin {
@@ -305,6 +317,7 @@
 }
 
 - (void)showBrushFromButton:(UIButton *)sender {
+    if (_brushPanel) return;
     if (self.presentedViewController) {
         [self.presentedViewController dismissViewControllerAnimated:YES completion:^{
             [self showBrushFromButton:sender];
@@ -312,7 +325,7 @@
         return;
     }
     __weak typeof(self) weakSelf = self;
-    RBBrushPopover *popover = [[RBBrushPopover alloc] initWithColor:_drawView.lineColor
+    _brushPanel = [[RBBrushPopover alloc] initWithColor:_drawView.lineColor
         width:_drawView.lineWidth colorChange:^(UIColor *color) {
             __strong typeof(weakSelf) controller = weakSelf;
             if (!controller) return;
@@ -323,13 +336,35 @@
             controller->_drawView.lineWidth = width;
             controller->_brush.accessibilityValue = [NSString stringWithFormat:@"粗细 %.0f 磅", width];
         } widthCommit:^(CGFloat width) { [RBPrefs setLineWidth:width]; }];
-    popover.popoverPresentationController.sourceView = sender;
-    popover.popoverPresentationController.sourceRect = CGRectInset(sender.bounds, -(RBToolbarPadding + 8), 0);
-    // Zero arrow metrics hide the arrow; keep native side selection beside the toolbar.
-    popover.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionLeft | UIPopoverArrowDirectionRight;
-    popover.popoverPresentationController.passthroughViews = @[];
-    [popover updateAvailableSize:UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets).size];
-    [self presentViewController:popover animated:YES completion:nil];
+    _brushPanel.closeHandler = ^{ [weakSelf closeBrushPanel]; };
+    _brushAnchor = sender;
+    _brushDismissArea = [[UIControl alloc] initWithFrame:self.view.bounds];
+    _brushDismissArea.backgroundColor = UIColor.clearColor;
+    _brushDismissArea.opaque = NO;
+    [_brushDismissArea addTarget:self action:@selector(closeBrushPanel) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_brushDismissArea];
+    [self addChildViewController:_brushPanel];
+    [self layoutBrushPanel];
+    [self.view addSubview:_brushPanel.view];
+    [_brushPanel didMoveToParentViewController:self];
+    UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, _brushPanel.view);
+}
+
+- (void)closeBrushPanel {
+    if (!_brushPanel) return;
+    [_brushPanel commitPendingChanges];
+    if (_brushPanel.presentedViewController)
+        [_brushPanel dismissViewControllerAnimated:NO completion:nil];
+    [_brushPanel willMoveToParentViewController:nil];
+    [_brushPanel.view removeFromSuperview];
+    [_brushPanel removeFromParentViewController];
+    [_brushDismissArea removeFromSuperview];
+    UIButton *anchor = _brushAnchor ?: _brush;
+    _brushPanel = nil;
+    _brushDismissArea = nil;
+    _brushAnchor = nil;
+    if (self.view.window && !self.view.window.hidden)
+        UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, anchor);
 }
 
 @end

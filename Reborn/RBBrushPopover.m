@@ -6,37 +6,6 @@
 #import <QuartzCore/QuartzCore.h>
 #include <math.h>
 
-// Replace UIKit's popover material so the toolbar chrome is the only background.
-@interface RBBrushBackgroundView : UIPopoverBackgroundView
-@property (nonatomic) CGFloat arrowOffset;
-@property (nonatomic) UIPopoverArrowDirection arrowDirection;
-@end
-@implementation RBBrushBackgroundView {
-    RBChromeSurface *_surface;
-}
-@synthesize arrowOffset = _arrowOffset;
-@synthesize arrowDirection = _arrowDirection;
-+ (CGFloat)arrowBase { return 0; }
-+ (CGFloat)arrowHeight { return 0; }
-+ (UIEdgeInsets)contentViewInsets { return UIEdgeInsetsZero; }
-+ (BOOL)wantsDefaultContentAppearance { return NO; }
-- (instancetype)initWithFrame:(CGRect)frame {
-    if ((self = [super initWithFrame:frame])) {
-        self.backgroundColor = UIColor.clearColor;
-        self.opaque = NO;
-        _surface = [[RBChromeSurface alloc] initWithFrame:self.bounds];
-        _surface.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [self addSubview:_surface];
-    }
-    return self;
-}
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    self.layer.shadowOpacity = 0;
-    _surface.frame = self.bounds;
-}
-@end
-
 @interface RBBrushPopover () <UIColorPickerViewControllerDelegate, UIPopoverPresentationControllerDelegate>
 @end
 
@@ -45,6 +14,7 @@
     void (^_colorChange)(UIColor *);
     RBWidthPopover *_widthController;
     UIScrollView *_scroll;
+    UIView *_content;
     UIButton *_close;
     NSMutableArray<UIColor *> *_colors;
     NSArray<UIButton *> *_buttons;
@@ -75,11 +45,6 @@
         }
         _widthController = [[RBWidthPopover alloc] initWithWidth:width change:widthChange commit:widthCommit];
         self.preferredContentSize = CGSizeMake(RBBrushWidth, RBBrushHeight);
-        self.modalPresentationStyle = UIModalPresentationPopover;
-        self.popoverPresentationController.delegate = self;
-        self.popoverPresentationController.backgroundColor = UIColor.clearColor;
-        self.popoverPresentationController.popoverBackgroundViewClass = RBBrushBackgroundView.class;
-        self.popoverPresentationController.popoverLayoutMargins = UIEdgeInsetsMake(8, 8, 8, 8);
     }
     return self;
 }
@@ -98,19 +63,31 @@
     traitCollection:(UITraitCollection *)traits {
     return UIModalPresentationNone;
 }
+- (void)loadView {
+    self.view = [[RBChromeSurface alloc] initWithFrame:CGRectZero];
+    self.view.opaque = NO;
+    self.view.accessibilityViewIsModal = YES;
+}
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.clearColor;
+    // Clip controls to the same contour without clipping the surface's outer shadow.
+    _content = [[UIView alloc] initWithFrame:self.view.bounds];
+    _content.backgroundColor = UIColor.clearColor;
+    _content.opaque = NO;
+    _content.clipsToBounds = YES;
+    _content.layer.cornerRadius = self.view.layer.cornerRadius;
+    _content.layer.cornerCurve = self.view.layer.cornerCurve;
+    [self.view addSubview:_content];
     _close = [[RBChromeButton alloc] initWithFrame:CGRectZero];
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightSemibold];
     [_close setImage:[UIImage systemImageNamed:@"xmark" withConfiguration:config] forState:UIControlStateNormal];
     _close.accessibilityLabel = _close.largeContentTitle = @"关闭画笔设置";
     [_close addTarget:self action:@selector(close:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:_close];
+    [_content addSubview:_close];
     _scroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
     _scroll.delaysContentTouches = NO;
     _scroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
-    [self.view addSubview:_scroll];
+    [_content addSubview:_scroll];
     NSMutableArray *buttons = [NSMutableArray array];
     for (NSUInteger i = 0; i < RBBrushColorCount; i++) {
         UIButton *button = [[RBChromeButton alloc] initWithFrame:CGRectZero];
@@ -130,6 +107,7 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat width = self.view.bounds.size.width;
+    _content.frame = self.view.bounds;
     _close.frame = CGRectMake((width - RBBrushClose) / 2, 0, RBBrushClose, RBBrushClose);
     _scroll.frame = CGRectMake(0, RBBrushClose, width, MAX(0, self.view.bounds.size.height - RBBrushClose));
     CGFloat y = 8;
@@ -227,17 +205,23 @@
     }];
 }
 - (void)presentationControllerDidDismiss:(UIPresentationController *)controller {
-    [self commitColor];
-    [_widthController commitPendingWidth];
+    [self commitPendingChanges];
     if (controller.presentedViewController == _picker) _picker = nil;
 }
-- (void)close:(UIButton *)sender {
+- (void)commitPendingChanges {
     [self commitColor];
     [_widthController commitPendingWidth];
-    [self dismissViewControllerAnimated:YES completion:nil];
+}
+- (void)close:(UIButton *)sender {
+    if (self.closeHandler) self.closeHandler();
+}
+- (BOOL)accessibilityPerformEscape {
+    if (!self.closeHandler) return NO;
+    self.closeHandler();
+    return YES;
 }
 - (void)viewWillDisappear:(BOOL)animated {
-    [self commitColor];
+    [self commitPendingChanges];
     [super viewWillDisappear:animated];
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {

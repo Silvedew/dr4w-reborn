@@ -91,6 +91,17 @@ they do not establish real App Store sandbox/IPC behavior.
     entry's white circle/gray pencil and toolbar gear; installed-app icons and
     selected ink colors must keep their colors.
 
+17. With drawing closed and only the floating ball visible, repeatedly rotate
+    portrait to landscape, landscape left to right, and reverse midway through
+    rotation. Check the entire animation for four black rectangles around the
+    ball, not only the final frame. Repeat with the ball centered and near each
+    edge, sizes 44/56/80 pt, light/dark appearance and Split View resizing. After
+    each rotation, verify tapping, dragging in both axes, edge snapping and saved
+    position still work. Repeat in a legacy app without UIScene when available.
+    Backgrounding, temporarily hiding, disabling an app or opening drawing must
+    not restore a hidden ball when rotation completes. Source guards and layout
+    tests cannot establish that UIKit compositing artifacts are gone.
+
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,
 __RBBootstrap_block_invoke_5 starts at image offset 0xe7c4. It calls the

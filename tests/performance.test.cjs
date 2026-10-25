@@ -239,6 +239,33 @@ test('brush panel shares toolbar chrome without a second material, arrow or widt
   assert.match(controller, /layout.height - RBToolbarScrollTop - RBToolbarGap - RBToolbarHandle - RBToolbarPadding/);
 });
 
+test('floating ball stays transparent and uses rotation-safe placement and dragging', () => {
+  const floating = source('Reborn/RBFloating.m');
+  assert.match(floating, /_win.opaque = NO/);
+  assert.match(floating, /vc.view.opaque = NO/);
+  assert.match(floating, /_win.clipsToBounds = YES/);
+  assert.match(floating, /vc.view.clipsToBounds = YES/);
+  assert.doesNotMatch(floating, /_win.frame/);
+  assert.match(floating, /_win.bounds = CGRectMake\(0, 0, size, size\)/);
+  assert.match(floating, /convertPoint:center fromCoordinateSpace:\[self hostSpace\]/);
+  assert.match(floating, /CGSizeApplyAffineTransform/);
+  assert.match(floating, /_win.center = CGPointMake\(_win.center.x \+ delta.width, _win.center.y \+ delta.height\)/);
+  assert.match(floating, /if \(_win.windowScene\) return _win.windowScene.coordinateSpace/);
+  assert.match(floating, /window.windowLevel == UIWindowLevelNormal && window.rootViewController/);
+  assert.match(floating, /return _win.screen.coordinateSpace/);
+  const transition = floating.slice(floating.indexOf('- (void)viewWillTransitionToSize:'), floating.indexOf('@implementation RBFloating {'));
+  assert.match(transition, /animateAlongsideTransition:[\s\S]*?\[self.owner applyPrefs\][\s\S]*?completion:[\s\S]*?\[self.owner applyPrefs\]/);
+  assert.doesNotMatch(transition, /hidden =|transform =|makeKey/);
+  assert.match(floating, /viewDidLayoutSubviews[\s\S]*?\[self.owner layoutBall\]/);
+  const pan = floating.slice(floating.indexOf('- (void)panned:'));
+  assert.match(pan, /convertPoint:CGPointZero fromCoordinateSpace:_win/);
+  assert.match(pan, /convertPoint:t fromCoordinateSpace:_win/);
+  assert.match(pan, /end.x - start.x/);
+  assert.match(pan, /end.y - start.y/);
+  assert.match(floating, /RBClampFloatingOrigin/);
+  assert.match(source('.github/workflows/build.yml'), /tests\/floating_layout_test.c/);
+});
+
 test('compact brush popover uses centered icon slots and edits only the selected slot', () => {
   const brush = source('Reborn/RBBrushPopover.m');
   const pick = brush.slice(brush.indexOf('- (void)pick:'), brush.indexOf('- (void)editColor:'));

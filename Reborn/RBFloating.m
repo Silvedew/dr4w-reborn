@@ -5,14 +5,38 @@
 #import "RBIconStyle.h"
 #import "RBDiagnostics.h"
 #import "RBChrome.h"
+#import "RBFloatingLayout.h"
 
 #import <QuartzCore/QuartzCore.h>
 
 @interface RBFloating ()
 - (CGRect)clamped:(CGRect)f;
+- (id<UICoordinateSpace>)hostSpace;
+- (void)placeWindowAt:(CGPoint)center;
+- (void)layoutBall;
 - (CGFloat)size;
 - (UIImage *)icon;
 - (BOOL)disabledHere;
+@end
+
+@interface RBFloatingController : UIViewController
+@property (nonatomic, weak) RBFloating *owner;
+@end
+
+@implementation RBFloatingController
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self.owner layoutBall];
+}
+- (void)viewWillTransitionToSize:(CGSize)size
+    withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        [self.owner applyPrefs];
+    } completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        [self.owner applyPrefs];
+    }];
+}
 @end
 
 @implementation RBFloating {
@@ -22,6 +46,7 @@
     BOOL      _userHidden;
     BOOL      _snapped;
     NSInteger _fadeGen;
+    CGPoint   _center;
 }
 
 + (instancetype)shared {
@@ -59,17 +84,20 @@
     _snapped = NO;
     CGFloat size = [self size];
 
-    CGPoint c = [RBPrefs floatCenter];
-    _win = [[UIWindow alloc] initWithFrame:[self clamped:CGRectMake(c.x - size / 2.0,
-                                                                    c.y - size / 2.0,
-                                                                    size, size)]];
+    _center = [RBPrefs floatCenter];
+    _win = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, size, size)];
     if (scene) _win.windowScene = scene;
     _win.windowLevel = UIWindowLevelAlert + 900.0;
     _win.backgroundColor = [UIColor clearColor];
+    _win.opaque = NO;
+    _win.clipsToBounds = YES;
 
-    UIViewController *vc = [[UIViewController alloc] init];
+    RBFloatingController *vc = [[RBFloatingController alloc] init];
+    vc.owner = self;
     vc.view = [[UIView alloc] initWithFrame:_win.bounds];
     vc.view.backgroundColor = [UIColor clearColor];
+    vc.view.opaque = NO;
+    vc.view.clipsToBounds = YES;
     _win.rootViewController = vc;
 
     _ball = [[RBChromeSurface alloc] initWithFrame:_win.bounds usesMaterial:NO];
@@ -102,6 +130,7 @@
     [_btn addGestureRecognizer:press];
 
     [_ball addSubview:_btn];
+    [self applyPrefs];
 }
 
 - (UIImage *)icon {
@@ -166,29 +195,48 @@
 }
 
 - (CGRect)clamped:(CGRect)f {
-    CGRect host = RBHostBounds();
-    if (host.size.width < f.size.width + 16) host.size.width = f.size.width + 16;
-    if (host.size.height < f.size.height + 16) host.size.height = f.size.height + 16;
-    if (f.origin.x < 8.0) f.origin.x = 8.0;
-    if (f.origin.y < 8.0) f.origin.y = 8.0;
-    if (f.origin.x > host.size.width - f.size.width - 8.0)
-        f.origin.x = host.size.width - f.size.width - 8.0;
-    if (f.origin.y > host.size.height - f.size.height - 8.0)
-        f.origin.y = host.size.height - f.size.height - 8.0;
+    CGRect host = [self hostSpace].bounds;
+    RBFloatingOrigin origin = RBClampFloatingOrigin(f.origin.x, f.origin.y,
+        host.origin.x, host.origin.y, host.size.width, host.size.height, f.size.width);
+    f.origin = CGPointMake(origin.x, origin.y);
     return f;
+}
+
+- (id<UICoordinateSpace>)hostSpace {
+    if (_win.windowScene) return _win.windowScene.coordinateSpace;
+    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+        if (!window.hidden && window.windowLevel == UIWindowLevelNormal && window.rootViewController)
+            return window;
+    }
+    return _win.screen.coordinateSpace;
+}
+
+- (void)placeWindowAt:(CGPoint)center {
+    // Convert a displacement to the window's parent axes without using its rotated frame.
+    CGPoint local = [_win convertPoint:center fromCoordinateSpace:[self hostSpace]];
+    CGSize delta = CGSizeApplyAffineTransform(CGSizeMake(local.x - CGRectGetMidX(_win.bounds),
+        local.y - CGRectGetMidY(_win.bounds)), _win.transform);
+    _win.center = CGPointMake(_win.center.x + delta.width, _win.center.y + delta.height);
+}
+
+- (void)layoutBall {
+    CGFloat size = [self size];
+    _ball.bounds = CGRectMake(0, 0, size, size);
+    CGRect bounds = _win.rootViewController.view.bounds;
+    _ball.center = CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds));
+    _ball.layer.cornerRadius = size / 2.0;
+    _btn.frame = _ball.bounds;
+    _btn.layer.cornerRadius = size / 2.0;
 }
 
 - (void)applyPrefs {
     if (!_win) return;
     CGFloat size = [self size];
-    CGRect f = _win.frame;
-    f.size = CGSizeMake(size, size);
-    _win.frame = [self clamped:f];
-
-    _ball.frame = CGRectMake(0, 0, size, size);
-    _ball.layer.cornerRadius = size / 2.0;
-    _btn.frame = _ball.bounds;
-    _btn.layer.cornerRadius = size / 2.0;
+    CGRect f = [self clamped:CGRectMake(_center.x - size / 2, _center.y - size / 2, size, size)];
+    _center = CGPointMake(CGRectGetMidX(f), CGRectGetMidY(f));
+    _win.bounds = CGRectMake(0, 0, size, size);
+    [self placeWindowAt:_center];
+    [self layoutBall];
     [_btn setImage:[self icon] forState:UIControlStateNormal];
     if (!_snapped) _ball.alpha = [RBPrefs ballAlpha];
 }
@@ -226,22 +274,19 @@
     CGFloat size = [self size];
 
     CGPoint t = [g translationInView:_win];
-    CGRect f = _win.frame;
-    f.origin.x += t.x;
-    f.origin.y += t.y;
-
-    CGRect host = RBHostBounds();
-    if (f.origin.x < 8.0) f.origin.x = 8.0;
-    if (f.origin.y < 8.0) f.origin.y = 8.0;
-    if (f.origin.x > host.size.width - size - 8.0) f.origin.x = host.size.width - size - 8.0;
-    if (f.origin.y > host.size.height - size - 8.0) f.origin.y = host.size.height - size - 8.0;
+    id<UICoordinateSpace> hostSpace = [self hostSpace];
+    CGPoint start = [hostSpace convertPoint:CGPointZero fromCoordinateSpace:_win];
+    CGPoint end = [hostSpace convertPoint:t fromCoordinateSpace:_win];
+    CGRect f = [self clamped:CGRectMake(_center.x - size / 2 + end.x - start.x,
+        _center.y - size / 2 + end.y - start.y, size, size)];
+    CGRect host = hostSpace.bounds;
 
     if (g.state == UIGestureRecognizerStateEnded ||
         g.state == UIGestureRecognizerStateCancelled) {
         /* snap flush to a side and dim, like a screen-edge tab */
-        if (f.origin.x <= 24.0) { f.origin.x = 8.0; _snapped = YES; }
-        else if (f.origin.x >= host.size.width - size - 24.0) {
-            f.origin.x = host.size.width - size - 8.0;
+        if (f.origin.x <= CGRectGetMinX(host) + 24.0) { f.origin.x = CGRectGetMinX(host) + 8.0; _snapped = YES; }
+        else if (f.origin.x >= CGRectGetMaxX(host) - size - 24.0) {
+            f.origin.x = CGRectGetMaxX(host) - size - 8.0;
             _snapped = YES;
         } else {
             _snapped = NO;
@@ -250,7 +295,8 @@
         [RBPrefs setFloatCenter:CGPointMake(CGRectGetMidX(f), CGRectGetMidY(f))];
     }
 
-    _win.frame = f;
+    _center = CGPointMake(CGRectGetMidX(f), CGRectGetMidY(f));
+    [self placeWindowAt:_center];
 
     CGPoint zero;
     zero.x = 0.0;

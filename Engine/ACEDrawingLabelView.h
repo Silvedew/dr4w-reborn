@@ -198,6 +198,10 @@
  */
 - (void)showEditingHandles;
 
+// Temporary presentation only: preserves the text input session and never notifies the drawing delegate.
+- (BOOL)beginSystemScreenshot;
+- (void)endSystemScreenshotRestoringFocus:(BOOL)restoreFocus;
+
 /** Sets the text alpha.
  *
  * @param alpha     A value of text transparency.

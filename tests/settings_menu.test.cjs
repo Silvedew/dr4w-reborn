@@ -56,14 +56,52 @@ test('settings panel labels are shortened and only app deactivation stays destru
   assert.doesNotMatch(panel, /绘图设置|绘画设置/);
   assert.match(panel, /_back\.accessibilityLabel = _back\.largeContentTitle = @"返回设置"/);
   assert.match(panel, /_close\.accessibilityLabel = _close\.largeContentTitle = @"关闭设置"/);
+  const titleForRow = methodBody(panel, '- (NSString *)titleForRow:(NSInteger)row selected:(BOOL *)selected');
+  assert.match(titleForRow, /_page == RBSettingsDisableConfirmation[\s\S]*?row == 1 \? @"取消，保留绘图" : @"停用并关闭画板"/);
   const cell = methodBody(panel, '- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)path');
   assert.doesNotMatch(cell, /_page == RBSettingsMain && path\.row/);
   assert.match(cell, /_page == RBSettingsDisableConfirmation && path\.row == 2[\s\S]*?UIColor\.systemRedColor/);
-  assert.match(panel, /path\.row == 1 \? @"取消，保留绘图" : @"停用并关闭画板"/);
+  const rowTapped = methodBody(panel, '- (void)rowTapped:(UIButton *)sender');
+  assert.match(rowTapped, /if \(row == 1\) \{ \[self cancelPendingConfirmation\]; \[self showPage:RBSettingsApplications\]; return; \}/);
+  assert.match(rowTapped, /if \(row == 2\) \{ \[self showPage:RBSettingsApplications\]; \[self savePendingApplication\]; return; \}/);
   const controller = source('Reborn/RBController.m');
   assert.doesNotMatch(controller, /brushHandler|clearHandler|绘图设置|绘画设置/);
   assert.match(controller, /label:@"设置" action:@selector\(settingsTapped:\)/);
-  assert.match(controller, /_barButtons = @\[_close, _clear, _brush, _undo, _gear\]/);
+  assert.match(controller, /_screenshot\s*=\s*\[self barButton:@"camera" label:@"保存系统截图" action:@selector\(screenshotTapped:\)\]/);
+  assert.match(controller, /_barButtons = @\[_close, _clear, _brush, _undo, _screenshot, _gear\]/);
   assert.match(controller, /label:@"画笔设置" action:@selector\(showBrushFromButton:\)/);
   assert.match(controller, /clearTapped:[\s\S]*?\[_drawView clear\]/);
+});
+
+test('settings page sizes respond to content, font and host changes', () => {
+  const panel = source('Reborn/RBSettingsPanel.m');
+  for (const signature of [
+    '- (void)showPage:(RBSettingsPage)page',
+    '- (void)searchChanged:(id)sender',
+    '- (void)contentSizeChanged:(NSNotification *)note',
+  ]) assert.match(methodBody(panel, signature), /\[self reloadContent\]/);
+  const available = methodBody(panel, '- (void)updateAvailableSize:(CGSize)size');
+  assert.match(available, /_availableSize = size/);
+  assert.match(available, /\[self updatePreferredSize\]/);
+  const preferred = methodBody(panel, '- (void)updatePreferredSize');
+  assert.match(preferred, /\[self measureContentTarget\]/);
+  assert.match(preferred, /RBSettingsPanelSizeForContent/);
+  assert.match(preferred, /!CGSizeEqualToSize\(preferred, self\.preferredContentSize\)/);
+  const controller = source('Reborn/RBController.m');
+  assert.match(methodBody(controller, '- (void)preferredContentSizeDidChangeForChildContentContainer:'),
+    /container == _settingsPanel\) \[self\.view setNeedsLayout\]/);
+  assert.match(methodBody(controller, '- (void)keyboardChanged:'), /\[self layoutSettingsPanel\]/);
+});
+
+test('search keeps its dimensions while typing and restores content sizing on exit', () => {
+  const panel = source('Reborn/RBSettingsPanel.m');
+  const begin = methodBody(panel, '- (void)textFieldDidBeginEditing:');
+  assert.match(begin, /_frozenSearchTarget = _contentTarget/);
+  assert.match(begin, /_searchEditing = YES/);
+  const end = methodBody(panel, '- (void)textFieldDidEndEditing:');
+  assert.match(end, /_searchEditing = NO/);
+  assert.match(end, /\[self reloadContent\]/);
+  const showPage = methodBody(panel, '- (void)showPage:(RBSettingsPage)page');
+  assert.match(showPage, /page != RBSettingsApplications[\s\S]*?_searchEditing = NO[\s\S]*?\[_search resignFirstResponder\]/);
+  assert.match(methodBody(panel, '- (void)updatePreferredSize'), /RBSettingsPanelTargetWhileEditing/);
 });

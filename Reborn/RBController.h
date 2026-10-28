@@ -6,4 +6,5 @@
 - (void)refreshToolbarPreferences;
 - (void)setInitialToolbarAnchor:(CGPoint)anchor fromWindow:(UIWindow *)sourceWindow;
 - (void)syncFloatingPositionAfterUserClose;
+- (void)cancelPendingScreenshot;
 @end

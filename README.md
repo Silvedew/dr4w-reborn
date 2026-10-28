@@ -37,8 +37,10 @@ control                 deb metadata
   triangle, pentagon, hexagon and their filled variants)
 - Undo, clear canvas
 - Tool / colour / width picker inside the panel (no Preference bundle needed)
-- Screenshot: flattens the drawing onto white and saves a PNG to
-  `/var/mobile/Media/Dr4wReborn/`
+- Screenshot: captures the screen with the drawing overlaid; the toolbar and text
+  selection border are temporarily hidden and the keyboard is dismissed during
+  capture. A successful capture closes drawing. Screenshot access is audited only
+  for enabled foreground apps.
 - Summon / dismiss with **Volume Up -> Volume Down** (within 0.9 s, device unlocked)
 - Settings -> 全局画板: master switch, home-screen switch, volume shortcut,
   and an App 启用 list with native app icons and hidden-component filtering
@@ -91,8 +93,8 @@ instead aligns the toolbar's top Close button with the ball's center, clamped to
 the app's safe area. After manually moving the toolbar, closing with Close or the
 volume shortcut moves the ball to that top-button anchor. Automatic dismissal
 and initial edge avoidance leave the ball's position unchanged.
-Its scrollable actions run from Close through Clear,
-Pencil, Undo and Settings; use two fingers to scroll the actions in short windows.
+Its six scrollable actions run from Close through Clear, Pencil, Undo, Screenshot
+and Settings; use two fingers to scroll the actions in short windows.
 Dragging cancels button taps. VoiceOver users can move the bar through the Settings
 button's four directional custom actions. Settings includes a live 60–150% global
 toolbar-size slider; compact sizes preserve 44-point button targets.
@@ -106,6 +108,14 @@ identifier both here and in system Settings. Changes merge one App at a time thr
 SpringBoard and report save failures. Disabling the current drawing App requires
 confirmation because it closes the canvas and floating ball. App directory loading
 runs off the SpringBoard main thread, and the search panel avoids the keyboard.
+
+The Screenshot action captures the screen with the drawing annotation, temporarily
+hiding the toolbar and text selection border and dismissing the keyboard. On success
+it closes the drawing panel. On failure or an unconfirmed result, the editing state
+is restored and no automatic retry is made. Access is audited for enabled foreground
+processes; the system screenshot notification does not guarantee the image has been
+saved to Photos.
+iPadOS 15.1 permissions and the full capture flow still need true-device acceptance.
 
 The Pencil button opens a 60 pt wide vertical panel with four icon-only color
 slots and a numbered vertical 1–30 pt slider with a live line preview. Up means
@@ -138,9 +148,6 @@ Everything is ordinary Objective-C; rebuild after each edit.
 
 ## Known MVP limitations
 
-- The screenshot saves the **drawing on a white background**, not a capture of the
-  SpringBoard content behind it (capturing the screen needs a private snapshot API;
-  can be added later).
 - The Settings page requires PreferenceLoader, installed as a package dependency.
 - Text tool uses the system keyboard (the window is made key while open).
 

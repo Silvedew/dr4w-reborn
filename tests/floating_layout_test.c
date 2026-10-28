@@ -5,7 +5,7 @@
 
 int main(void) {
     const double hosts[][4] = {{0,0,1024,1366}, {0,0,1366,1024},
-        {0,0,320,768}, {0,0,200,180}, {200,24,320,600}};
+        {0,0,320,768}, {0,0,200,180}, {200,24,320,600}, {-80,56,375,240}};
     const double sizes[] = {44,56,80};
     for (unsigned i = 0; i < sizeof(hosts) / sizeof(hosts[0]); i++) {
         for (unsigned j = 0; j < sizeof(sizes) / sizeof(sizes[0]); j++) {
@@ -34,6 +34,11 @@ int main(void) {
                     (RBToolbarPoint){followed.x - x, followed.y - y}, (RBToolbarPosition){0.5,0.5}, scales[k]);
                 RBToolbarLayout restored = RBLayoutToolbar(w, h, 24, 0, 20, 0, reopened, scales[k]);
                 assert(fabs(restored.x - bar.x) < 0.001 && fabs(restored.y - bar.y) < 0.001);
+                RBToolbarMetrics metrics = RBToolbarMetricsForScale(scales[k]);
+                assert(fabs(RBToolbarTopAnchor(restored, scales[k]).x -
+                    (restored.x + restored.width / 2)) < 0.001);
+                assert(fabs(RBToolbarTopAnchor(restored, scales[k]).y -
+                    (restored.y + metrics.padding + metrics.button / 2)) < 0.001);
             }
             // An origin saved before rotation/resizing must clamp inside the new host.
             RBFloatingOrigin resized = RBClampFloatingOrigin(1280, 900, x, y, w, h, s);

@@ -92,6 +92,10 @@ typedef NS_ENUM(NSUInteger, ACEDrawingMode) {
 // cleanup in preparation for taking a snapshot
 - (void)prepareForSnapshot;
 
+// Returns whether an active text keyboard must finish hiding before the system capture.
+- (BOOL)beginSystemScreenshot;
+- (void)endSystemScreenshotRestoringFocus:(BOOL)restoreFocus;
+
 // undo / redo
 - (BOOL)canUndo;
 - (void)undoLatestStep;

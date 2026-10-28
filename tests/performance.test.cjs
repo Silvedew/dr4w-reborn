@@ -153,7 +153,7 @@ test('sandbox settings use event-driven snapshots and bounded worker-queue trans
   const writable = store.slice(store.indexOf('static BOOL RBWritableDrawingKey'), store.indexOf('static NSArray'));
   assert.doesNotMatch(writable, /enabledApps|@"enabled"|homeEnabled/);
   assert.doesNotMatch(store, /scheduledTimer|dispatch_after|dictionaryWithContentsOfFile/);
-  assert.match(source('Reborn/RBManager.m'), /if \(RBIsSpringBoard\(\)\) RBStartSettingsService\(\);/);
+  assert.match(source('Reborn/RBManager.m'), /if \(RBIsSpringBoard\(\)\)\s*\{\s*RBStartSettingsService\(\);/);
 });
 
 test('injection uses bundle alternatives and initializes UIKit only after reaching the main queue', () => {
@@ -209,6 +209,13 @@ test('whole toolbar drags with one finger, scrolls with two and saves per-app po
   assert.doesNotMatch(source('Preferences/RBRootListController.m'), /systemBlueColor/);
 });
 
+test('toolbar screenshot uses the system camera action and standard button interaction', () => {
+  const controller = source('Reborn/RBController.m');
+  assert.match(controller, /_screenshot\s*=\s*\[self barButton:@"camera" label:@"保存系统截图" action:@selector\(screenshotTapped:\)\]/);
+  assert.match(controller, /\[b addTarget:self action:action forControlEvents:UIControlEventTouchUpInside\]/);
+  assert.match(controller, /@\[_close, _clear, _brush, _undo, _screenshot, _gear\]/);
+});
+
 test('vertical stroke-width control updates locally and commits after interaction', () => {
   const popover = source('Reborn/RBWidthPopover.m');
   assert.match(popover, /_slider.minimumValue = 1/);
@@ -222,7 +229,7 @@ test('vertical stroke-width control updates locally and commits after interactio
   assert.match(popover, /CGContextRotateCTM\(context.CGContext, M_PI_2\)/);
   assert.match(popover, /_scroll.scrollEnabled = NO/);
   assert.match(popover, /cancelTrackingWithEvent:[\s\S]*?_scroll.scrollEnabled = _restoreScrolling/);
-  assert.match(source('Reborn/RBController.m'), /@\[_close, _clear, _brush, _undo, _gear\]/);
+  assert.match(source('Reborn/RBController.m'), /@\[_close, _clear, _brush, _undo, _screenshot, _gear\]/);
   assert.match(source('Reborn/RBPrefs.m'), /RBSetting\(@"strokeWidth", nil\)/);
   assert.match(source('Shared/RBSettingsStore.m'), /@"strokeWidth"/);
 });

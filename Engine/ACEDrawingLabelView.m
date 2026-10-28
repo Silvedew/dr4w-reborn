@@ -25,6 +25,33 @@
 
 #import "ACEDrawingLabelView.h"
 
+@interface ACEScreenshotLabelState : NSObject
+@property (nonatomic, strong) UIView *inputView;
+@property (nonatomic, strong) UIView *accessoryView;
+@property (nonatomic, strong) UILabel *displayText;
+@property (nonatomic, copy) NSAttributedString *text;
+@property (nonatomic) NSRange selection;
+@property (nonatomic) NSRange marked;
+@property (nonatomic) BOOL firstResponder, closeHidden, rotateHidden, borderHidden;
+@property (nonatomic) float opacity;
+@end
+@implementation ACEScreenshotLabelState
+@end
+
+static NSRange ACEInputRange(UITextField *field, UITextRange *range) {
+    if (!range) return NSMakeRange(NSNotFound, 0);
+    NSInteger start = [field offsetFromPosition:field.beginningOfDocument toPosition:range.start];
+    NSInteger length = [field offsetFromPosition:range.start toPosition:range.end];
+    return start >= 0 && length >= 0 ? NSMakeRange((NSUInteger)start, (NSUInteger)length) : NSMakeRange(NSNotFound, 0);
+}
+
+static UITextRange *ACETextRange(UITextField *field, NSRange range) {
+    if (range.location == NSNotFound || NSMaxRange(range) > field.text.length) return nil;
+    UITextPosition *start = [field positionFromPosition:field.beginningOfDocument offset:range.location];
+    UITextPosition *end = [field positionFromPosition:start offset:range.length];
+    return start && end ? [field textRangeFromPosition:start toPosition:end] : nil;
+}
+
 CG_INLINE CGPoint CGRectGetCenter(CGRect rect)
 {
     return CGPointMake(CGRectGetMidX(rect), CGRectGetMidY(rect));
@@ -74,6 +101,7 @@ CG_INLINE CGSize CGAffineTransformGetScale(CGAffineTransform t)
 @property (nonatomic, strong) UIButton *closeButton;
 
 @property (nonatomic, assign, getter=isShowingEditingHandles) BOOL showEditingHandles;
+@property (nonatomic, strong) ACEScreenshotLabelState *screenshotState;
 
 @end
 
@@ -333,6 +361,80 @@ CG_INLINE CGSize CGAffineTransformGetScale(CGAffineTransform t)
 
 #pragma mark - Bounds
 
+- (BOOL)beginSystemScreenshot {
+    if (self.screenshotState) return self.screenshotState.firstResponder;
+    UITextField *field = self.labelTextField;
+    ACEScreenshotLabelState *state = [ACEScreenshotLabelState new];
+    self.screenshotState = state;
+    state.text = field.attributedText;
+    state.selection = ACEInputRange(field, field.selectedTextRange);
+    state.marked = ACEInputRange(field, field.markedTextRange);
+    state.firstResponder = field.isFirstResponder;
+    state.inputView = field.inputView;
+    state.accessoryView = field.inputAccessoryView;
+    state.closeHidden = self.closeButton.hidden;
+    state.rotateHidden = self.rotateButton.hidden;
+    state.borderHidden = self.border.hidden;
+    state.opacity = field.layer.opacity;
+    self.closeButton.hidden = YES;
+    self.rotateButton.hidden = YES;
+    self.border.hidden = YES;
+
+    // A plain text presentation hides caret, marked-text decoration, and selection without changing them.
+    CGRect textRect = [field textRectForBounds:field.bounds];
+    UILabel *display = [[UILabel alloc] initWithFrame:[field convertRect:textRect toView:self]];
+    display.font = field.font;
+    display.textColor = field.textColor;
+    display.textAlignment = field.textAlignment;
+    display.attributedText = field.attributedText;
+    display.alpha = field.alpha;
+    display.layer.opacity = state.opacity;
+    display.accessibilityElementsHidden = YES;
+    [self insertSubview:display aboveSubview:field];
+    state.displayText = display;
+    field.layer.opacity = 0;
+    if (state.firstResponder) {
+        // Keeping the same responder preserves an in-progress Chinese composition and its selection.
+        field.inputView = [[UIView alloc] initWithFrame:CGRectZero];
+        field.inputAccessoryView = nil;
+        [field reloadInputViews];
+    }
+    return state.firstResponder;
+}
+
+- (void)endSystemScreenshotRestoringFocus:(BOOL)restoreFocus {
+    ACEScreenshotLabelState *state = self.screenshotState;
+    if (!state) return;
+    UITextField *field = self.labelTextField;
+    [state.displayText removeFromSuperview];
+    field.layer.opacity = state.opacity;
+    self.closeButton.hidden = state.closeHidden;
+    self.rotateButton.hidden = state.rotateHidden;
+    self.border.hidden = state.borderHidden;
+    field.inputView = state.inputView;
+    field.inputAccessoryView = state.accessoryView;
+    if (restoreFocus && state.firstResponder) {
+        if (!field.isFirstResponder) [field becomeFirstResponder];
+        [field reloadInputViews];
+        // Some third-party keyboards commit marked text when their input view is replaced.
+        if (![field.attributedText isEqualToAttributedString:state.text] ||
+            !NSEqualRanges(ACEInputRange(field, field.markedTextRange), state.marked)) {
+            field.attributedText = state.text;
+            if (state.marked.location != NSNotFound && NSMaxRange(state.marked) <= state.text.length) {
+                field.selectedTextRange = ACETextRange(field, state.marked);
+                NSRange selected = NSMakeRange(0, 0);
+                if (state.selection.location >= state.marked.location &&
+                    NSMaxRange(state.selection) <= NSMaxRange(state.marked))
+                    selected = NSMakeRange(state.selection.location - state.marked.location, state.selection.length);
+                [field setMarkedText:[state.text.string substringWithRange:state.marked] selectedRange:selected];
+            }
+        }
+        UITextRange *selection = ACETextRange(field, state.selection);
+        if (selection) field.selectedTextRange = selection;
+    }
+    self.screenshotState = nil;
+}
+
 - (void)hideEditingHandles
 {
     self.showEditingHandles = NO;
@@ -496,6 +598,7 @@ CG_INLINE CGSize CGAffineTransformGetScale(CGAffineTransform t)
 
 - (BOOL)textFieldShouldBeginEditing:(UITextField *)textField
 {
+    if (self.screenshotState) return YES;
     if (self.isShowingEditingHandles) {
         return YES;
     }
@@ -505,6 +608,7 @@ CG_INLINE CGSize CGAffineTransformGetScale(CGAffineTransform t)
 
 - (void)textFieldDidBeginEditing:(UITextField *)textField
 {
+    if (self.screenshotState) return;
     if ([self.delegate respondsToSelector:@selector(labelViewDidStartEditing:)]) {
         [self.delegate labelViewDidStartEditing:self];
     }
@@ -515,6 +619,7 @@ CG_INLINE CGSize CGAffineTransformGetScale(CGAffineTransform t)
 
 #pragma mark - UITextField UIControlEvent
 - (void)textFieldEditingChanged:(UITextField *)textField {
+    if (self.screenshotState) return;
     if (!self.isShowingEditingHandles) {
         [self showEditingHandles];
     }

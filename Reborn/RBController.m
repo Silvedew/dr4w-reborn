@@ -10,6 +10,7 @@
 #import "RBSettingsPanelLayout.h"
 #import "RBBrushLayout.h"
 #import "RBSettings.h"
+#import "RBScreenshotPolicy.h"
 
 #import "ACEDrawingView.h"
 #import <QuartzCore/QuartzCore.h>
@@ -46,12 +47,23 @@
     UIButton       *_undo;
     UIButton       *_clear;
     UIButton       *_close;
+    UIButton       *_screenshot;
     RBBrushPopover *_brushPanel;
     UIControl      *_brushDismissArea;
     __weak UIButton *_brushAnchor;
     RBSettingsPanel *_settingsPanel;
     UIControl *_settingsDismissArea;
     CGRect _keyboardScreenFrame;
+    BOOL _keyboardTransitioning;
+    RBScreenshotSession _screenshotSession;
+    NSTimeInterval _screenshotDeadline;
+    BOOL _screenshotWaitingForKeyboard;
+    BOOL _screenshotDrawingInteraction;
+    CADisplayLink *_screenshotDisplayLink;
+    NSUInteger _screenshotFrames;
+    NSArray<UIView *> *_screenshotChrome;
+    NSArray<NSNumber *> *_screenshotChromeHidden;
+    UILabel *_screenshotMessage;
 
 }
 
@@ -81,6 +93,15 @@
         name:UIKeyboardWillChangeFrameNotification object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(keyboardChanged:)
         name:UIKeyboardWillHideNotification object:nil];
+    for (NSNotificationName name in @[UIKeyboardDidHideNotification, UIKeyboardDidChangeFrameNotification])
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(screenshotKeyboardSettled:)
+            name:name object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(systemScreenshotTaken:)
+        name:UIApplicationUserDidTakeScreenshotNotification object:nil];
+    for (NSNotificationName name in @[UIApplicationWillResignActiveNotification,
+        UISceneWillDeactivateNotification, UISceneDidDisconnectNotification])
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(screenshotHostDidDeactivate:)
+            name:name object:nil];
 }
 
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
@@ -139,7 +160,9 @@
     _undo  = [self barButton:@"arrow.uturn.backward" label:@"撤销上一笔" action:@selector(undoTapped:)];
     _clear = [self barButton:@"trash" label:@"清空画板" action:@selector(clearTapped:)];
     _close = [self barButton:@"xmark" label:@"关闭画板" action:@selector(closeTapped:)];
-    _barButtons = @[_close, _clear, _brush, _undo, _gear];
+    _screenshot = [self barButton:@"camera" label:@"保存系统截图" action:@selector(screenshotTapped:)];
+    _screenshot.accessibilityHint = @"隐藏工具栏后保存带标注的系统截图，成功后关闭画板";
+    _barButtons = @[_close, _clear, _brush, _undo, _screenshot, _gear];
     for (UIButton *button in _barButtons) [_barScroll addSubview:button];
 
 }
@@ -179,6 +202,11 @@
     }
     [self layoutBrushPanel];
     [self layoutSettingsPanel];
+}
+
+- (void)preferredContentSizeDidChangeForChildContentContainer:(id<UIContentContainer>)container {
+    [super preferredContentSizeDidChangeForChildContentContainer:container];
+    if (container == _settingsPanel) [self.view setNeedsLayout];
 }
 
 - (void)setInitialToolbarAnchor:(CGPoint)anchor fromWindow:(UIWindow *)sourceWindow {
@@ -302,6 +330,158 @@
     [[RBManager shared] dismissFromUser];
 }
 
+- (BOOL)screenshotSessionIsCurrent:(uint64_t)generation {
+    return RBScreenshotIsCurrent(&_screenshotSession, generation) &&
+        [[RBManager shared] isActiveDrawingController:self];
+}
+
+- (BOOL)screenshotKeyboardIsVisible {
+    if (CGRectIsEmpty(_keyboardScreenFrame)) return NO;
+    CGRect screen = self.view.window.screen.coordinateSpace.bounds;
+    CGRect overlap = CGRectIntersection(screen, _keyboardScreenFrame);
+    return !CGRectIsNull(overlap) && !CGRectIsEmpty(overlap);
+}
+
+- (void)screenshotTapped:(UIButton *)sender {
+    if (![[RBManager shared] isActiveDrawingController:self] || !RBScreenshotBegin(&_screenshotSession)) return;
+    uint64_t generation = _screenshotSession.generation;
+    _screenshotDeadline = NSProcessInfo.processInfo.systemUptime + 3.0;
+    [_screenshotMessage removeFromSuperview];
+    _screenshotMessage = nil;
+    NSMutableArray *chrome = [NSMutableArray arrayWithObject:_bar];
+    if (_brushPanel) [chrome addObjectsFromArray:@[_brushPanel.view, _brushDismissArea]];
+    if (_settingsPanel) [chrome addObjectsFromArray:@[_settingsPanel.view, _settingsDismissArea]];
+    _screenshotChrome = chrome;
+    NSMutableArray *hidden = [NSMutableArray array];
+    for (UIView *view in chrome) {
+        [hidden addObject:@(view.hidden)];
+        view.hidden = YES;
+    }
+    _screenshotChromeHidden = hidden;
+    _screenshotDrawingInteraction = _drawView.userInteractionEnabled;
+    _drawView.userInteractionEnabled = NO;
+    // Set this before reloadInputViews, whose keyboard notifications can be synchronous.
+    _screenshotWaitingForKeyboard = YES;
+    [_drawView beginSystemScreenshot];
+    _screenshotWaitingForKeyboard = _keyboardTransitioning || [self screenshotKeyboardIsVisible];
+    if (!_screenshotWaitingForKeyboard) [self waitForScreenshotFrames];
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        RBController *controller = weakSelf;
+        if ([controller screenshotSessionIsCurrent:generation])
+            [controller finishScreenshot:RBScreenshotExpired(&controller->_screenshotSession)];
+    });
+}
+
+- (void)screenshotKeyboardSettled:(NSNotification *)notification {
+    _keyboardTransitioning = NO;
+    _keyboardScreenFrame = [notification.name isEqual:UIKeyboardDidHideNotification] ? CGRectZero :
+        [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    if (_screenshotSession.active && _screenshotWaitingForKeyboard && ![self screenshotKeyboardIsVisible]) {
+        _screenshotWaitingForKeyboard = NO;
+        [self waitForScreenshotFrames];
+    }
+}
+
+- (void)waitForScreenshotFrames {
+    if (_screenshotDisplayLink || !_screenshotSession.active || _screenshotSession.sent) return;
+    [self.view layoutIfNeeded];
+    _screenshotFrames = 0;
+    _screenshotDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(screenshotFrame:)];
+    [_screenshotDisplayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+}
+
+- (void)screenshotFrame:(CADisplayLink *)displayLink {
+    if (![self screenshotSessionIsCurrent:_screenshotSession.generation]) {
+        [self cancelPendingScreenshot];
+        return;
+    }
+    // The first callback precedes presentation; the next guarantees a full hidden-chrome frame.
+    if (++_screenshotFrames < 2) return;
+    [displayLink invalidate];
+    _screenshotDisplayLink = nil;
+    if (NSProcessInfo.processInfo.systemUptime >= _screenshotDeadline) {
+        [self finishScreenshot:RBScreenshotRejected];
+        return;
+    }
+    uint64_t generation = _screenshotSession.generation;
+    __weak typeof(self) weakSelf = self;
+    [[RBManager shared] requestScreenshotForController:self deadline:_screenshotDeadline
+        willSend:^BOOL {
+            RBController *controller = weakSelf;
+            if (![controller screenshotSessionIsCurrent:generation]) return NO;
+            controller->_screenshotSession.sent = true;
+            return YES;
+        }
+        completion:^(RBScreenshotResult reply) {
+            RBController *controller = weakSelf;
+            if (![controller screenshotSessionIsCurrent:generation]) return;
+            RBScreenshotResult result = RBScreenshotAcknowledge(&controller->_screenshotSession, reply);
+            if (result != RBScreenshotPending) [controller finishScreenshot:result];
+        }];
+}
+
+- (void)systemScreenshotTaken:(NSNotification *)notification {
+    if (![self screenshotSessionIsCurrent:_screenshotSession.generation]) return;
+    // UIKit exposes no request identifier; a simultaneous hardware screenshot cannot be distinguished.
+    RBScreenshotResult result = RBScreenshotObserved(&_screenshotSession);
+    if (result == RBScreenshotSucceeded) [self finishScreenshot:result];
+}
+
+- (void)restoreScreenshotPresentationWithFocus:(BOOL)restoreFocus {
+    [_screenshotDisplayLink invalidate];
+    _screenshotDisplayLink = nil;
+    _screenshotWaitingForKeyboard = NO;
+    for (NSUInteger i = 0; i < _screenshotChrome.count; i++)
+        _screenshotChrome[i].hidden = _screenshotChromeHidden[i].boolValue;
+    _screenshotChrome = nil;
+    _screenshotChromeHidden = nil;
+    [_drawView endSystemScreenshotRestoringFocus:restoreFocus];
+    _drawView.userInteractionEnabled = _screenshotDrawingInteraction;
+}
+
+- (void)cancelPendingScreenshot {
+    if (!_screenshotSession.active) return;
+    RBScreenshotCancel(&_screenshotSession);
+    [self restoreScreenshotPresentationWithFocus:NO];
+}
+
+- (void)screenshotHostDidDeactivate:(NSNotification *)notification {
+    if ([notification.name isEqualToString:UIApplicationWillResignActiveNotification] ||
+        notification.object == self.view.window.windowScene) [self cancelPendingScreenshot];
+}
+
+- (void)finishScreenshot:(RBScreenshotResult)result {
+    if (![self screenshotSessionIsCurrent:_screenshotSession.generation]) return;
+    RBScreenshotCancel(&_screenshotSession);
+    if (result == RBScreenshotSucceeded) {
+        [self restoreScreenshotPresentationWithFocus:NO];
+        [[RBManager shared] dismissFromUser];
+        return;
+    }
+    [self restoreScreenshotPresentationWithFocus:YES];
+    NSString *message = result == RBScreenshotUncertain ? @"截图状态不确定，请查看系统截图后再操作" :
+        @"系统截图未完成，画板已恢复";
+    // A nonmodal notice preserves the text field's focus and marked text after a failed capture.
+    UILabel *notice = [[UILabel alloc] initWithFrame:CGRectZero];
+    notice.text = message;
+    notice.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    notice.textColor = UIColor.labelColor;
+    notice.backgroundColor = UIColor.secondarySystemBackgroundColor;
+    notice.textAlignment = NSTextAlignmentCenter;
+    notice.numberOfLines = 0;
+    notice.layer.cornerRadius = 12;
+    notice.clipsToBounds = YES;
+    CGRect safe = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
+    notice.frame = CGRectMake(CGRectGetMinX(safe) + 16, CGRectGetMinY(safe) + 12, MAX(0, safe.size.width - 32), 64);
+    _screenshotMessage = notice;
+    [self.view addSubview:notice];
+    UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, message);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        [notice removeFromSuperview];
+    });
+}
+
 
 #pragma mark - settings
 
@@ -342,6 +522,7 @@
 }
 
 - (void)keyboardChanged:(NSNotification *)notification {
+    _keyboardTransitioning = YES;
     _keyboardScreenFrame = [notification.name isEqualToString:UIKeyboardWillHideNotification]
         ? CGRectZero : [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
     [self layoutSettingsPanel];

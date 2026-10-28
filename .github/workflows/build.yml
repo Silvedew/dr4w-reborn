@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Performance regression guards
-        run: node --test tests/performance.test.cjs tests/settings_menu.test.cjs
+        run: node --test tests/performance.test.cjs tests/settings_menu.test.cjs tests/screenshot.test.cjs
 
       - name: Activation and settings behavior tests
         run: |
@@ -34,6 +34,10 @@ jobs:
           /tmp/rb-brush-tests
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/floating_layout_test.c -o /tmp/rb-floating-tests
           /tmp/rb-floating-tests
+          clang -std=c11 -Wall -Wextra -Werror -IShared tests/screenshot_policy_test.c -o /tmp/rb-screenshot-policy-tests
+          /tmp/rb-screenshot-policy-tests
+          clang -fobjc-arc -IShared -framework Foundation tests/ScreenshotTransportTests.m -o /tmp/rb-screenshot-transport-tests
+          /tmp/rb-screenshot-transport-tests
           clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m tests/FakeHBPreferences.m Shared/RBAppCatalog.m -o /tmp/rb-settings-tests
           /tmp/rb-settings-tests
           clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/PreferencesControllerTests.m tests/FakeHBPreferences.m -o /tmp/rb-controller-tests

@@ -8,6 +8,8 @@
 #import "RBSystemHooks.h"
 #import "RBSettings.h"
 #import "RBDiagnostics.h"
+#import "RBScreenshotService.h"
+#import "RBScreenshotTransport.h"
 #import <QuartzCore/QuartzCore.h>
 
 #import <notify.h>
@@ -160,6 +162,8 @@ CGRect RBHostBounds(void) {
 - (void)dismiss {
     if (!_window) return;
 
+    [(RBController *)_window.rootViewController cancelPendingScreenshot];
+
     for (UIViewController *child in _window.rootViewController.childViewControllers) {
         if ([child isKindOfClass:RBBrushPopover.class]) [(RBBrushPopover *)child commitPendingChanges];
         if ([child isKindOfClass:RBSettingsPanel.class]) [(RBSettingsPanel *)child commitPendingChanges];
@@ -201,6 +205,27 @@ CGRect RBHostBounds(void) {
     [(RBController *)_window.rootViewController refreshToolbarPreferences];
 }
 
+- (BOOL)isActiveDrawingController:(RBController *)controller {
+    return controller && [self isShowing] && _window.rootViewController == controller && RBMayPresent() &&
+        (!_window.windowScene || _window.windowScene.activationState == UISceneActivationStateForegroundActive);
+}
+
+- (void)requestScreenshotForController:(RBController *)controller deadline:(NSTimeInterval)deadline
+                             willSend:(BOOL (^)(void))willSend
+                           completion:(void (^)(RBScreenshotResult))completion {
+    __weak RBController *weakController = controller;
+    BOOL (^current)(void) = ^BOOL {
+        return [self isActiveDrawingController:weakController] &&
+            NSProcessInfo.processInfo.systemUptime < deadline;
+    };
+    if (RBIsSpringBoard()) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!current() || !willSend || !willSend()) { completion(RBScreenshotRejected); return; }
+            completion(RBTakeLocalSystemScreenshot(deadline));
+        });
+    } else RBSendScreenshotRequest(deadline, current, willSend, completion);
+}
+
 @end
 
 #pragma mark - startup
@@ -220,7 +245,10 @@ static void RBBootstrap(void) {
         }
         static dispatch_once_t once;
         dispatch_once(&once, ^{
-        if (RBIsSpringBoard()) RBStartSettingsService();
+        if (RBIsSpringBoard()) {
+            RBStartSettingsService();
+            RBStartScreenshotService();
+        }
         RBReloadSettings();
         __block BOOL wasEnabled = RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]);
         RBDiagnostic(@"initialized", [NSString stringWithFormat:@"enabled=%d state=%ld scenes=%lu",

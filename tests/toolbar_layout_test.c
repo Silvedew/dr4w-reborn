@@ -22,7 +22,7 @@ int main(void) {
         closeTo(metrics.gap, 8 * scale);
         closeTo(metrics.padding, 8 * scale);
         closeTo(metrics.thickness, metrics.button + 2 * metrics.padding);
-        closeTo(metrics.contentLength, 5 * metrics.button + 4 * metrics.gap);
+        closeTo(metrics.contentLength, 6 * metrics.button + 5 * metrics.gap);
         closeTo(metrics.length, metrics.contentLength + 2 * metrics.padding);
         for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
             double w = sizes[i][0], h = sizes[i][1];
@@ -58,7 +58,7 @@ int main(void) {
         RBToolbarLayout initial = RBLayoutToolbar(1024, 1366, 24, 0, 20, 0, RBToolbarDefaultPosition(), scale);
         closeTo(initial.x, maximum.x);
         closeTo(initial.y, (minimum.y + maximum.y) / 2);
-        closeTo(initial.height, metrics.length); // No handle or unused bottom slot.
+        closeTo(initial.height, metrics.length); // Six actions, with no handle or unused bottom slot.
         RBToolbarPosition moved = RBToolbarPositionForOrigin(minimum, maximum, 200, 300, RBToolbarDefaultPosition());
         RBToolbarLayout restored = RBLayoutToolbar(1024, 1366, 24, 0, 20, 0, moved, scale);
         closeTo(restored.x, 200);
@@ -86,7 +86,7 @@ int main(void) {
     RBToolbarMetrics standard = RBToolbarMetricsForScale(1);
     assert(standard.thickness == RBToolbarThickness && standard.length == RBToolbarLength);
     assert(RBToolbarDefaultPosition().x == 1 && RBToolbarDefaultPosition().y == 0.5);
-    assert(RBToolbarButton >= 44 && RBToolbarCount == 5);
+    assert(RBToolbarButton >= 44 && RBToolbarCount == 6);
     assert(!RBToolbarPointsDiffer((RBToolbarPoint){10,20}, (RBToolbarPoint){10.00001,20}));
     puts("Toolbar scale, top-anchor alignment and round trips, edge moves, safe bounds and overflow passed.");
     return 0;

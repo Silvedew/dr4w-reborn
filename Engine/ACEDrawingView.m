@@ -55,6 +55,7 @@
 @property (nonatomic) CGSize cacheRendererSize;
 
 @property (nonatomic, strong) ACEDrawingLabelView *draggableTextView;
+@property (nonatomic, copy) NSArray<ACEDrawingLabelView *> *screenshotLabels;
 @end
 
 #pragma mark -
@@ -548,6 +549,28 @@
 {
     // make sure text label border and handles are hidden for snapshot
     [self hideTextToolHandles];
+}
+
+- (BOOL)beginSystemScreenshot {
+    if (self.screenshotLabels) return NO;
+    NSMutableArray *labels = [NSMutableArray array];
+    BOOL keyboard = NO;
+    for (id<ACEDrawingTool> tool in self.pathArray) {
+        if (![tool isKindOfClass:ACEDrawingDraggableTextTool.class]) continue;
+        ACEDrawingLabelView *label = ((ACEDrawingDraggableTextTool *)tool).labelView;
+        if (label) {
+            [labels addObject:label];
+            keyboard = [label beginSystemScreenshot] || keyboard;
+        }
+    }
+    self.screenshotLabels = labels;
+    return keyboard;
+}
+
+- (void)endSystemScreenshotRestoringFocus:(BOOL)restoreFocus {
+    for (ACEDrawingLabelView *label in self.screenshotLabels)
+        [label endSystemScreenshotRestoringFocus:restoreFocus];
+    self.screenshotLabels = nil;
 }
 
 - (void)hideTextToolHandles

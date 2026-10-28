@@ -59,12 +59,12 @@ they do not establish real App Store sandbox/IPC behavior.
     legible over a busy app. Enable Reduce Transparency and Increase Contrast:
     ball and toolbar material become solid and their boundaries remain clear. Enable Reduce
     Motion: button feedback must not scale. Verify VoiceOver announces each action.
-14. Drag from the toolbar's background and each of its five buttons using one finger;
+14. Drag from the toolbar's background and each of its six buttons using one finger;
     there must be no separate drag handle. Verify buttons do not trigger
     while moving, release keeps the position without snapping, and outside-bar
     gestures continue drawing. Resize Split View and rotate: the toolbar keeps
     its relative position within safe areas and always remains vertical. In short
-    windows, use two fingers to scroll to all five controls without moving the toolbar.
+    windows, use two fingers to scroll to all six controls without moving the toolbar.
     Close and reopen with the volume shortcut, quit/reopen the app, and respring:
     the app's own saved position is restored. Move a second app's toolbar elsewhere and verify the
     positions remain independent. No reset-position menu should appear.
@@ -154,6 +154,26 @@ they do not establish real App Store sandbox/IPC behavior.
     With two scenes of the same App active, deactivate or close the drawing scene:
     its drawing window must close without moving the ball or blocking the other
     scene's ball, and must not restore keyboard focus to the inactive scene.
+
+22. Verify Screenshot on iPadOS 15.1 with permission prompts visible. In an enabled
+    foreground app, draw and add text, then capture. The image must contain the app
+    screen and drawing annotation, without the toolbar, keyboard or text-selection
+    border. Successful capture closes drawing. On a denied permission, failed capture
+    or unconfirmed result, verify the toolbar/editor/keyboard state returns and no
+    automatic second capture occurs. Confirm that seeing a system screenshot
+    notification does not guarantee the image was saved to Photos. From a background
+    process and an app that is not enabled, verify
+    capture requests are rejected; also reject a request that supplies a forged
+    process identity. Repeat with the Chinese input method composing text, while
+    rotating and resizing Split View, and check process changes during capture do not
+    expose another app's screen or leave the panel stuck. Record the iPadOS permission
+    result and a fresh process log for device acceptance; CI cannot establish these.
+23. Reopen Settings' toolbar panel at compact, standard and large text sizes. Each
+    page should use only the height its content needs when it fits, while long tool and
+    App lists remain scrollable within safe areas. Search App names and identifiers:
+    typing and clearing should update the visible rows without changing the panel's
+    size on every keystroke. Rotate or resize Split View with the keyboard open; the
+    panel must remain bounded, keep the active search text and avoid layout jumps.
 
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,

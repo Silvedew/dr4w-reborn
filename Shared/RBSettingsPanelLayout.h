@@ -35,8 +35,26 @@ static inline RBSettingsPanelSize RBSettingsPanelSizeForHost(double width, doubl
         fmin(RBSettingsPanelHeight, fmax(0, height - 24))};
 }
 
+// Content targets are independent of host constraints so a keyboard can shrink, then restore them.
+static inline RBSettingsPanelSize RBSettingsPanelSizeForContent(RBSettingsPanelSize target,
+    double hostWidth, double hostHeight) {
+    RBSettingsPanelSize limit = RBSettingsPanelSizeForHost(hostWidth, hostHeight);
+    return (RBSettingsPanelSize){fmin(limit.width, fmax(0, target.width)),
+        fmin(limit.height, fmax(0, target.height))};
+}
+
+static inline RBSettingsPanelSize RBSettingsPanelTargetWhileEditing(RBSettingsPanelSize measured,
+    RBSettingsPanelSize frozen, bool editing, bool searchPage) {
+    return editing && searchPage ? frozen : measured;
+}
+
+static inline double RBSettingsPanelScrollHeightForChrome(double height, double header, double search) {
+    return fmax(0, height - header - search);
+}
+
 static inline double RBSettingsPanelScrollHeight(double height, int hasSearch) {
-    return fmax(0, height - RBSettingsPanelHeader - (hasSearch ? RBSettingsPanelSearch : 0));
+    return RBSettingsPanelScrollHeightForChrome(height, RBSettingsPanelHeader,
+        hasSearch ? RBSettingsPanelSearch : 0);
 }
 
 static inline bool RBSettingsAppChangeNeedsConfirmation(bool enabled, bool currentApplication) {

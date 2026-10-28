@@ -257,12 +257,12 @@ int main(void) {
         gWorkspaceThrows = YES;
         assert(RBInstalledApplications() == nil);
         gWorkspaceThrows = NO;
-        assert([RBFilterApplications(catalog, @"  readER  ").count == 2);
-        assert([RBFilterApplications(catalog, @"test.notes").count == 1);
-        assert([RBFilterApplications(catalog, @"READER.ALT").count == 1);
-        assert([RBFilterApplications(catalog, @" ").count == catalog.count);
-        assert([RBFilterApplications(catalog, @"no such app").count == 0);
-        assert([RBFilterApplications(catalog, @"").count == catalog.count);
+        assert(RBFilterApplications(catalog, @"  readER  ").count == 2);
+        assert(RBFilterApplications(catalog, @"test.notes").count == 1);
+        assert(RBFilterApplications(catalog, @"READER.ALT").count == 1);
+        assert(RBFilterApplications(catalog, @" ").count == catalog.count);
+        assert(RBFilterApplications(catalog, @"no such app").count == 0);
+        assert(RBFilterApplications(catalog, @"").count == catalog.count);
         NSArray *nfc = RBFilterApplications(@[@{@"id":@"test.nfc", @"name":@"Café"}], @"Cafe\u0301");
         assert(nfc.count == 1);
         gInstalledApps = nil;

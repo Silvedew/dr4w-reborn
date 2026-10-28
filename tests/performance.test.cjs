@@ -186,18 +186,22 @@ test('native chrome adapts its material and press feedback to accessibility sett
   assert.match(source('Reborn/RBFloating.m'), /initWithFrame:_win.bounds usesMaterial:NO/);
 });
 
-test('floating toolbar moves only from its fixed handle and saves per-app position at gesture end', () => {
+test('whole toolbar drags with one finger, scrolls with two and saves per-app position on release', () => {
   const controller = source('Reborn/RBController.m');
-  assert.match(controller, /\[_dragHandle addGestureRecognizer:_barPan\]/);
-  assert.doesNotMatch(controller, /\[_bar(?:Scroll)? addGestureRecognizer:_barPan\]/);
+  assert.match(controller, /\[_bar addGestureRecognizer:_barPan\]/);
+  assert.doesNotMatch(controller, /_dragHandle|RBToolbarHandle/);
+  assert.match(controller, /_barPan.maximumNumberOfTouches = 1/);
+  assert.match(controller, /_barPan.cancelsTouchesInView = YES/);
+  assert.match(controller, /_barScroll.panGestureRecognizer.minimumNumberOfTouches = 2/);
+  assert.match(controller, /touchesShouldCancelInContentView:[\s\S]*?return YES/);
   assert.match(controller, /_toolbarPosition = RBToolbarPositionForApp\(NSBundle.mainBundle.bundleIdentifier\)/);
   assert.match(controller, /if \(gesture.state == UIGestureRecognizerStateEnded\) \[self saveToolbarPosition\]/);
   assert.match(controller, /gesture translationInView:self.view/);
   assert.match(controller, /RBToolbarPositionForOrigin/);
-  assert.match(controller, /_barScroll.frame = CGRectMake\(0, RBToolbarScrollTop/);
+  assert.match(controller, /_barScroll.frame = CGRectMake\(0, metrics.padding/);
   const movement = controller.slice(controller.indexOf('- (void)placeToolbarAt:'), controller.indexOf('#pragma mark - actions'));
   assert.doesNotMatch(movement, /RBWriteSetting|setFloatCenter|NSUserDefaults|animateWithDuration/);
-  assert.equal((controller.match(/initWithName:@"向[上下左右]移动"/g) || []).length, 4);
+  assert.equal((controller.match(/initWithName:@"向[上下左右]移动工具栏"/g) || []).length, 4);
   assert.match(source('Shared/RBIconStyle.h'), /RB_SETTINGS_SYMBOL "gearshape"/);
   assert.match(source('Reborn/RBFloating.m'), /_btn.tintColor = UIColor.labelColor/);
   assert.doesNotMatch(source('Preferences/RBRootListController.m'), /systemBlueColor/);
@@ -241,8 +245,7 @@ test('brush panel uses toolbar chrome in the same hierarchy without a system she
   assert.match(width, /accessibilityLabel = @"画笔粗细"/);
   assert.match(width, /CGSizeMake\(60, 184\)/);
   assert.match(width, /CGFloat inset = MIN\(24, self.bounds.size.width \/ 4\)/);
-  assert.match(controller, /_dragHandle.frame = CGRectMake\(RBToolbarPadding, layout.height - RBToolbarPadding - RBToolbarHandle/);
-  assert.match(controller, /layout.height - RBToolbarScrollTop - RBToolbarGap - RBToolbarHandle - RBToolbarPadding/);
+  assert.match(controller, /layout.height - 2 \* metrics.padding/);
 });
 
 test('embedded brush dismissal consumes outside taps, commits edits and removes containment', () => {
@@ -319,4 +322,45 @@ test('compact brush panel retains centered color slots and the native picker', (
   assert.match(controller, /updateAvailableSize:/);
   assert.match(brush, /\[self presentViewController:_picker animated:YES completion:nil\]/);
   assert.match(brush, /colorPickerViewControllerDidFinish:[\s\S]*?\[picker dismissViewControllerAnimated:YES/);
+});
+
+
+test('settings pages share embedded chrome, consume dismissal and commit on window teardown', () => {
+  const panel = source('Reborn/RBSettingsPanel.m');
+  const controller = source('Reborn/RBController.m');
+  assert.match(panel, /self.view = \[\[RBChromeSurface alloc\]/);
+  assert.doesNotMatch(panel + controller, /UIAlertControllerStyleActionSheet/);
+  assert.match(panel, /self.view.accessibilityViewIsModal = YES/);
+  assert.match(controller, /\[self addChildViewController:_settingsPanel\]/);
+  assert.match(controller, /\[_settingsPanel didMoveToParentViewController:self\]/);
+  assert.match(controller, /_settingsDismissArea[\s\S]*?action:@selector\(closeSettingsPanel\)/);
+  assert.match(controller, /UIKeyboardWillChangeFrameNotification/);
+  assert.match(controller, /CGRectIntersection\(safe, keyboard\)/);
+  assert.match(controller, /closeSettingsPanel[\s\S]*?commitPendingChanges[\s\S]*?endEditing:YES/);
+  assert.match(source('Reborn/RBManager.m'), /RBSettingsPanel.class\]\) \[\(RBSettingsPanel \*\)child commitPendingChanges\]/);
+});
+
+test('toolbar scale previews locally and validates shared persistence', () => {
+  const controller = source('Reborn/RBController.m');
+  const preview = controller.slice(controller.indexOf('- (void)previewToolbarScale:'), controller.indexOf('- (void)commitToolbarScale:'));
+  assert.doesNotMatch(preview, /RBWriteSetting|setToolbarScale/);
+  assert.match(source('Reborn/RBPrefs.m'), /RBWriteSetting\(@"toolbarScale"/);
+  assert.match(source('Shared/RBSettingsStore.m'), /\[value doubleValue\] < 0.6 \|\| \[value doubleValue\] > 1.5/);
+  assert.match(controller, /if \(!_previewingToolbarScale\)/);
+  assert.match(source('Reborn/RBManager.m'), /\[\[RBManager shared\] applySettings\]/);
+});
+
+test('App management uses a single-app acknowledged operation and shared search', () => {
+  const store = source('Shared/RBSettingsStore.m');
+  const preferences = source('Preferences/RBRootListController.m');
+  const panel = source('Reborn/RBSettingsPanel.m');
+  assert.match(preferences, /RBSetAppEnabled\(appID/);
+  assert.match(panel, /RBSetAppEnabled\(_pendingBundle/);
+  assert.match(store, /RBMergeAppEnabled\(request\[@"bundle"\]/);
+  assert.match(store, /\[confirmedApps containsObject:bundleID\] == enabled/);
+  assert.match(panel, /RBSettingsAppChangeNeedsConfirmation/);
+  assert.match(panel, /notify_cancel\(_settingsToken\)/);
+  for (const ui of [preferences, panel]) assert.match(ui, /RBFilterApplications/);
+  assert.match(source('Shared/RBAppCatalog.m'), /localizedCaseInsensitiveContainsString/);
+  assert.match(source('.github/workflows/build.yml'), /Shared\/RBSettingsStore.m Shared\/RBAppCatalog.m/);
 });

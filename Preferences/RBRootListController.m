@@ -1,49 +1,28 @@
 #import "RBPreferencesPrivate.h"
 #import "RBSettings.h"
 #import "RBIconStyle.h"
+#import "../Shared/RBAppCatalog.h"
+#import "../Shared/RBApplicationIcon.h"
 #include <math.h>
 
 static UIImage *RBSettingsIcon(NSString *symbol) {
     return [[UIImage systemImageNamed:symbol] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
-static BOOL RBNormalApplication(LSApplicationProxy *app) {
-    if ([app respondsToSelector:@selector(isInstalled)] && !app.isInstalled) return NO;
-    if ([app respondsToSelector:@selector(isPlaceholder)] && app.isPlaceholder) return NO;
-    if ([app respondsToSelector:@selector(isLaunchProhibited)] && app.isLaunchProhibited) return NO;
-    NSURL *url = [app respondsToSelector:@selector(bundleURL)] ? app.bundleURL : nil;
-    if (url) {
-        if (![url.pathExtension.lowercaseString isEqualToString:@"app"]) return NO;
-        NSDictionary *info = [NSDictionary dictionaryWithContentsOfURL:[url URLByAppendingPathComponent:@"Info.plist"]];
-        if (info[@"NSExtension"] || [info[@"LSUIElement"] boolValue] || [info[@"LSBackgroundOnly"] boolValue]) return NO;
-        NSString *type = info[@"CFBundlePackageType"];
-        if (type && ![type isEqualToString:@"APPL"]) return NO;
-        id tags = info[@"SBAppTags"];
-        if ([tags isKindOfClass:[NSArray class]] && [tags containsObject:@"hidden"]) return NO;
-    }
-    return YES;
-}
-
-static UIImage *RBApplicationIcon(NSString *bundleID) {
-    static NSCache *cache;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{ cache = [NSCache new]; cache.countLimit = 256; });
-    UIImage *icon = [cache objectForKey:bundleID];
-    if (icon) return icon;
-    if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)])
-        icon = [UIImage _applicationIconImageForBundleIdentifier:bundleID format:0 scale:[UIScreen mainScreen].scale];
-    if (!icon) icon = [UIImage systemImageNamed:@"app"];
-    if (icon) [cache setObject:icon forKey:bundleID];
-    return icon;
-}
-
 @interface RBSettingsListController : PSListController
 @property (nonatomic, strong) NSMutableArray *rbSpecifiers;
+@property (nonatomic, strong) NSMutableSet<NSString *> *rbPendingApps;
 - (PSSpecifier *)switchNamed:(NSString *)name key:(NSString *)key defaultValue:(BOOL)value;
 - (void)publishSpecifiers:(NSArray *)specifiers;
 @end
 
-@interface RBAppListController : RBSettingsListController
+@interface RBAppListController : RBSettingsListController <UISearchResultsUpdating>
+@property (nonatomic, copy) NSArray<NSDictionary *> *rbApplications;
+@property (nonatomic) BOOL rbLoadedApplications;
+@property (nonatomic, strong) UISearchController *rbSearchController;
+- (void)showApplicationsMatching:(NSString *)query;
+- (void)refreshVisibleSpecifiers;
+- (NSString *)currentSearchQuery;
 @end
 @interface RBRootListController : RBSettingsListController
 @end
@@ -99,13 +78,21 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
     NSString *key = [specifier propertyForKey:@"key"];
     id stored = @([value boolValue]);
     if (appID) {
-        key = @"enabledApps";
-        id current = RBSetting(key, @[]);
-        NSMutableArray *apps = [current isKindOfClass:[NSArray class]]
-            ? [current mutableCopy] : [NSMutableArray array];
-        [apps removeObject:appID];
-        if ([value boolValue]) [apps addObject:appID];
-        stored = apps;
+        if (!self.rbPendingApps) self.rbPendingApps = [NSMutableSet set];
+        if ([self.rbPendingApps containsObject:appID]) return;
+        [self.rbPendingApps addObject:appID];
+        [(RBAppListController *)self refreshVisibleSpecifiers];
+        RBSetAppEnabled(appID, [value boolValue], ^(BOOL saved, NSError *error) {
+            [self.rbPendingApps removeObject:appID];
+            [(RBAppListController *)self refreshVisibleSpecifiers];
+            if (saved) return;
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"设置未保存"
+                message:error.localizedDescription ?: @"请检查偏好设置文件的写入权限后重试。"
+                preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:alert animated:YES completion:nil];
+        });
+        return;
     }
     if (!RBWriteSetting(key, stored)) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"设置未保存"
@@ -142,56 +129,84 @@ static UIImage *RBApplicationIcon(NSString *bundleID) {
 @end
 
 @implementation RBAppListController
-- (NSMutableArray *)specifiers {
-    if (self.rbSpecifiers) return self.rbSpecifiers;
-    self.title = @"App 启用";
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.rbSearchController = [[UISearchController alloc] initWithSearchResultsController:nil];
+    self.rbSearchController.searchResultsUpdater = self;
+    self.rbSearchController.obscuresBackgroundDuringPresentation = NO;
+    self.navigationItem.searchController = self.rbSearchController;
+    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    __weak typeof(self) weakSelf = self;
+    RBObserveSettings(^{
+        [weakSelf refreshVisibleSpecifiers];
+    });
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    RBReloadSettings();
+    [self refreshVisibleSpecifiers];
+}
+
+- (NSString *)currentSearchQuery {
+    return self.rbSearchController.searchBar.text ?: @"";
+}
+
+- (void)refreshVisibleSpecifiers {
+    if (!self.rbSpecifiers) return;
+    self.rbSpecifiers = nil;
+    [self showApplicationsMatching:[self currentSearchQuery]];
+}
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
+    [self showApplicationsMatching:searchController.searchBar.text ?: @""];
+}
+
+- (void)showApplicationsMatching:(NSString *)query {
+    if (!self.rbLoadedApplications) {
+        self.rbApplications = RBInstalledApplications();
+        self.rbLoadedApplications = YES;
+    }
+    BOOL failed = self.rbApplications == nil;
+    NSArray *matches = failed ? @[] : RBFilterApplications(self.rbApplications, query);
     NSMutableArray *specifiers = [NSMutableArray array];
     PSSpecifier *group = [PSSpecifier groupSpecifierWithName:@"按 App 开启"];
     [group setProperty:@"关闭的 App 不响应画板快捷键，也不显示圆球。分屏时各 App 按自己的开关生效。"
         forKey:@"footerText"];
     [specifiers addObject:group];
-    Class cls = NSClassFromString(@"LSApplicationWorkspace");
-    LSApplicationWorkspace *workspace = [cls respondsToSelector:@selector(defaultWorkspace)]
-        ? [cls defaultWorkspace] : nil;
-    NSArray *installed = [workspace respondsToSelector:@selector(allInstalledApplications)]
-        ? [workspace allInstalledApplications] : @[];
-    NSMutableArray<NSDictionary *> *apps = [NSMutableArray array];
-    NSMutableSet *seen = [NSMutableSet set];
-    NSMutableDictionary<NSString *, NSNumber *> *nameCounts = [NSMutableDictionary dictionary];
-    for (LSApplicationProxy *app in installed) {
-        if (![app respondsToSelector:@selector(applicationIdentifier)]) continue;
-        NSString *appID = app.applicationIdentifier;
-        if (![appID isKindOfClass:[NSString class]] || !appID.length || [seen containsObject:appID] ||
-            [appID isEqualToString:@"com.apple.springboard"]) continue;
-        if (!RBNormalApplication(app)) continue;
-        NSString *name = [app respondsToSelector:@selector(localizedName)] ? app.localizedName : nil;
-        if (![name isKindOfClass:[NSString class]] || !name.length) name = appID;
-        name = [name precomposedStringWithCanonicalMapping];
-        [apps addObject:@{@"id":appID, @"name":name}];
-        nameCounts[name] = @([nameCounts[name] unsignedIntegerValue] + 1);
-        [seen addObject:appID];
-    }
-    [apps sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
-        NSComparisonResult result = [a[@"name"] localizedStandardCompare:b[@"name"]];
-        return result == NSOrderedSame ? [a[@"id"] compare:b[@"id"]] : result;
-    }];
-    for (NSDictionary *app in apps) {
+    for (NSDictionary *app in matches) {
         PSSpecifier *specifier = [self switchNamed:app[@"name"] key:@"enabledApps" defaultValue:NO];
         [specifier setProperty:app[@"id"] forKey:@"appID"];
         [specifier setProperty:app[@"name"] forKey:@"appName"];
         UIImage *icon = RBApplicationIcon(app[@"id"]);
         if (icon) [specifier setProperty:icon forKey:@"iconImage"];
-        if ([nameCounts[app[@"name"]] unsignedIntegerValue] > 1) {
-            [specifier setProperty:app[@"id"] forKey:@"appSubtitle"];
+        NSString *subtitle = app[@"subtitle"];
+        if (subtitle) {
+            [specifier setProperty:subtitle forKey:@"appSubtitle"];
             CGFloat height = MAX(54, ceil([UIFont preferredFontForTextStyle:UIFontTextStyleBody].lineHeight +
                 [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2].lineHeight + 18));
             [specifier setProperty:@(height) forKey:@"height"];
         }
+        [specifier setProperty:@(![self.rbPendingApps containsObject:app[@"id"]]) forKey:@"enabled"];
         [specifiers addObject:specifier];
     }
-    if (!apps.count) [group setProperty:@"无法读取已安装 App 列表，请重新打开设置后重试。" forKey:@"footerText"];
+    if (failed) [group setProperty:@"无法读取已安装 App 列表，请重新打开设置后重试。" forKey:@"footerText"];
+    else if (!self.rbApplications.count) [group setProperty:@"没有已安装的可用 App。" forKey:@"footerText"];
+    else if (!matches.count) [group setProperty:@"没有匹配的 App。清除搜索内容可恢复完整列表。" forKey:@"footerText"];
     [self publishSpecifiers:specifiers];
+}
+
+- (NSMutableArray *)specifiers {
+    if (self.rbSpecifiers) return self.rbSpecifiers;
+    self.title = @"App 启用";
+    [self showApplicationsMatching:[self currentSearchQuery]];
     return self.rbSpecifiers;
+}
+
+- (void)reloadSpecifiers {
+    self.rbSpecifiers = nil;
+    self.rbLoadedApplications = NO;
+    [self showApplicationsMatching:[self currentSearchQuery]];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {

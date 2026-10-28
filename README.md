@@ -83,13 +83,21 @@ retain the last successful snapshot; a successfully empty enabled-app list still
 disables all apps. Logs `settings.service`, `settings.transport`, and
 `settings.snapshot` distinguish registration, connection, and refresh failures.
 
-The vertical toolbar moves by its fixed bottom handle and stays inside the current app's
+The vertical toolbar moves with a one-finger drag anywhere on the bar, including its buttons, and stays inside the current app's
 safe area. Each app retains its own relative position across closing, app restarts,
 respring, rotation and Split View resizing. Apps without a saved position start
 at the right-hand center. Its scrollable actions run from Close through Clear,
-Pencil, Undo and Settings; short windows keep the handle fixed while the actions
-scroll above it. VoiceOver users
-can move the handle through its four directional custom actions.
+Pencil, Undo and Settings; use two fingers to scroll the actions in short windows.
+Dragging cancels button taps. VoiceOver users can move the bar through the Settings
+button's four directional custom actions. Settings includes a live 60–150% global
+toolbar-size slider; compact sizes preserve 44-point button targets.
+
+The Settings menu and its tool, ball, size and App pages use the same translucent
+rounded material as the brush panel. App management is searchable by name or bundle
+identifier both here and in system Settings. Changes merge one App at a time through
+SpringBoard and report save failures. Disabling the current drawing App requires
+confirmation because it closes the canvas and floating ball. App directory loading
+runs off the SpringBoard main thread, and the search panel avoids the keyboard.
 
 The Pencil button opens a 60 pt wide vertical panel with four icon-only color
 slots and a numbered vertical 1–30 pt slider with a live line preview. Up means

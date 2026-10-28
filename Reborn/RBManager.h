@@ -12,5 +12,6 @@ CGRect RBHostBounds(void);
 - (void)present;
 - (void)dismiss;
 - (void)layoutForCurrentHost;
+- (void)applySettings;
 
 @end

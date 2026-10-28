@@ -3,6 +3,7 @@
 static NSString *gTestDomain;
 #define RB_SETTINGS_DOMAIN gTestDomain
 #import "RBSettings.h"
+#import "RBAppCatalog.h"
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -26,10 +27,48 @@ static dispatch_semaphore_t gCepheiStallGate;
 @end
 
 static HBPreferences *gClientPreferences;
+static BOOL gCatalogUnavailable;
+static BOOL gCatalogThrows;
+static NSArray<NSDictionary *> *RBFixtureInstalledApplications(void) {
+    if (gCatalogThrows) [NSException raise:@"RBFixtureCatalogFailure" format:@"simulated enumeration failure"];
+    if (gCatalogUnavailable) return nil;
+    NSMutableArray *apps = [NSMutableArray array];
+    for (NSString *bundleID in @[@"tv.danmaku.bilianime", @"test.reader", @"test.other",
+        @"test.concurrent.a", @"test.concurrent.b"])
+        [apps addObject:@{@"id":bundleID, @"name":bundleID}];
+    return apps;
+}
+@interface RBFailingPreferences : HBPreferences
+@end
+@implementation RBFailingPreferences
+- (id)objectForKey:(NSString *)key { return [RBPreferences() objectForKey:key]; }
+- (NSDictionary *)dictionaryRepresentation { return RBPreferences().dictionaryRepresentation; }
+- (void)setObject:(id)value forKey:(NSString *)key {
+    [NSException raise:@"RBFixtureWriteFailure" format:@"simulated persistence failure"];
+}
+@end
+@interface RBSilentPreferences : RBFailingPreferences
+@end
+@implementation RBSilentPreferences
+- (void)setObject:(id)value forKey:(NSString *)key { }
+@end
 static HBPreferences *RBTestPreferences(void) { return gClientPreferences ?: RBPreferences(); }
 #define RBPreferences RBTestPreferences
+#define RBInstalledApplications RBFixtureInstalledApplications
 #import "../Shared/RBSettingsStore.m"
 #undef RBPreferences
+#undef RBInstalledApplications
+
+static CFDataRef RBReceiveDroppingAppAck(CFMessagePortRef port, SInt32 message, CFDataRef data, void *info) {
+    CFDataRef reply = RBReceiveSettings(port, message, data, info);
+    NSDictionary *request = RBDecode((__bridge NSData *)data);
+    if ([request[@"operation"] isEqual:@"appEnabled"]) {
+        assert([RBDecode((__bridge NSData *)reply)[@"saved"] boolValue]);
+        if (reply) CFRelease(reply);
+        return NULL;
+    }
+    return reply;
+}
 
 static void PumpUntil(BOOL (^condition)(void)) {
     NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:5];
@@ -75,29 +114,52 @@ int main(int argc, const char *argv[]) {
                 assert(position.x == 0.7 && position.y == 0.3);
                 assert(([RBBrushColorForSlot(0) isEqual:@[@0.1,@0.2,@0.3,@1]]));
                 assert(([RBBrushColorForSlot(1) isEqual:@[@0.8,@0.4,@0.1,@1]]));
+                assert([RBSetting(@"toolbarScale", nil) doubleValue] == 1.5);
+                assert([RBSetting(@"enabledApps", @[]) containsObject:@"test.concurrent.a"]);
+                assert([RBSetting(@"enabledApps", @[]) containsObject:@"test.concurrent.b"]);
+                assert(![RBSetting(@"enabledApps", @[]) containsObject:@"test.reader"]);
                 return 0;
             }
-            [RBPreferences() setObject:@[@"tv.danmaku.bilianime"] forKey:@"enabledApps"];
+            if (![RBPreferences() objectForKey:@"enabledApps"])
+                [RBPreferences() setObject:@[@"tv.danmaku.bilianime"] forKey:@"enabledApps"];
             [RBPreferences() setObject:@3 forKey:@"colorIndex"];
-            if (strcmp(argv[1], "--lh-only") == 0) {
-                CFMessagePortRef port = CFMessagePortCreateLocal(NULL,
-                    (__bridge CFStringRef)RBServiceNames()[1], RBReceiveSettings, NULL, NULL);
-                assert(port);
-                CFRunLoopSourceRef source = CFMessagePortCreateRunLoopSource(NULL, port, 0);
-                CFRunLoopAddSource(CFRunLoopGetMain(), source, kCFRunLoopCommonModes);
-                CFRelease(source);
-                CFRelease(port);
+            gCatalogUnavailable = strcmp(argv[1], "--catalog-unavailable") == 0;
+            if (strcmp(argv[1], "--write-fails") == 0) gClientPreferences = [RBFailingPreferences new];
+            if (strcmp(argv[1], "--write-silent") == 0) gClientPreferences = [RBSilentPreferences new];
+            BOOL dropAcknowledgement = strcmp(argv[1], "--lost-app-ack") == 0;
+            if (strcmp(argv[1], "--lh-only") == 0 || dropAcknowledgement) {
+                NSArray *names = dropAcknowledgement ? RBServiceNames() : @[RBServiceNames()[1]];
+                for (NSString *name in names) {
+                    CFMessagePortRef port = CFMessagePortCreateLocal(NULL, (__bridge CFStringRef)name,
+                        dropAcknowledgement ? RBReceiveDroppingAppAck : RBReceiveSettings, NULL, NULL);
+                    assert(port);
+                    CFRunLoopSourceRef source = CFMessagePortCreateRunLoopSource(NULL, port, 0);
+                    CFRunLoopAddSource(CFRunLoopGetMain(), source, kCFRunLoopCommonModes);
+                    CFRelease(source);
+                    CFRelease(port);
+                }
             } else RBStartSettingsService();
             printf("ready\n"); fflush(stdout);
             if (strcmp(argv[1], "--stalled") == 0) [NSThread sleepForTimeInterval:30];
             else [[NSRunLoop currentRunLoop] run];
             return 0;
         }
+        // A failed enumeration must clear loading so a later request can recover.
+        gCatalogThrows = YES;
+        RBRefreshApplicationCatalog();
+        PumpUntil(^BOOL { return !gApplicationCatalogLoading; });
+        assert(!gApplicationCatalog);
+        gCatalogThrows = NO;
+        RBRefreshApplicationCatalog();
+        PumpUntil(^BOOL { return !gApplicationCatalogLoading; });
+        assert(gApplicationCatalog.count == 5);
+        gApplicationCatalog = nil;
+
         gTestDomain = [NSString stringWithFormat:@"com.dsh.dr4wreborn.bridge-tests.%d", getpid()];
         NSTask *server = StartServer(@"--server");
         NSDictionary *response = RBBridgeRequest(Request(@"read"));
         assert([response[@"values"][@"colorIndex"] isEqual:@3]);
-        // Untrusted requests cannot change app policy, choose domains, or access paths.
+        // Generic writes cannot replace app policy, choose domains, or access paths.
         assert(!RBBridgeRequest(@{@"domain": @"com.apple.test", @"operation": @"read"}));
         assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"write",
             @"key": @"enabledApps", @"value": @[]}));
@@ -109,6 +171,15 @@ int main(int argc, const char *argv[]) {
         assert(!RBWritableDrawingKey(@"strokeWidth", @0));
         assert(!RBWritableDrawingKey(@"strokeWidth", @31));
         assert(!RBWritableDrawingKey(@"strokeWidth", @1.5));
+        for (id invalid in @[@0.59, @1.51, @(NAN), @(INFINITY), @"1.0"])
+            assert(!RBWritableDrawingKey(@"toolbarScale", invalid));
+        assert(!RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"appEnabled",
+            @"bundle":@"../file", @"enabled":@YES}));
+        assert(!RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"appEnabled",
+            @"bundle":@"com.apple.springboard", @"enabled":@NO}));
+        assert(!RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"appEnabled",
+            @"bundle":@"test.reader", @"enabled":@2}));
+        assert(!RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"applications", @"refresh":@"yes"}));
         assert(!RBHandleSettingsRequest(@{@"domain": gTestDomain, @"operation": @7}));
         assert(!RBBridgeRequest(@{@"domain": gTestDomain, @"operation": @"write",
             @"key": @"toolbarPositions", @"value": @{}}));
@@ -137,6 +208,44 @@ int main(int argc, const char *argv[]) {
             return [RBBridgeRequest(Request(@"read"))[@"values"][@"colorIndex"] isEqual:@5];
         });
         assert(!RBWriteSetting(@"enabled", @NO));
+        assert(!RBWriteSetting(@"enabledApps", @[]));
+        __block BOOL loaded = NO;
+        RBLoadApplications(^(NSArray<NSDictionary *> *apps, NSError *error) {
+            assert(NSThread.isMainThread && !error && apps.count == 5);
+            loaded = YES;
+        });
+        PumpUntil(^BOOL { return loaded; });
+        __block BOOL enabledApp = NO;
+        RBSetAppEnabled(@"test.reader", YES, ^(BOOL saved, NSError *error) {
+            assert(NSThread.isMainThread && saved && !error);
+            assert([RBSetting(@"enabledApps", @[]) containsObject:@"test.reader"]);
+            assert([RBSetting(@"enabledApps", @[]) containsObject:@"tv.danmaku.bilianime"]);
+            enabledApp = YES;
+        });
+        PumpUntil(^BOOL { return enabledApp; });
+        assert(![RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"appEnabled",
+            @"bundle":@"test.not-installed", @"enabled":@YES})[@"saved"] boolValue]);
+        __block BOOL disabledApp = NO;
+        RBSetAppEnabled(@"test.reader", NO, ^(BOOL saved, NSError *error) {
+            assert(saved && !error && ![RBSetting(@"enabledApps", @[]) containsObject:@"test.reader"]);
+            disabledApp = YES;
+        });
+        PumpUntil(^BOOL { return disabledApp; });
+        __block NSUInteger appChanges = 0;
+        for (NSString *bundleID in @[@"test.concurrent.a", @"test.concurrent.b"])
+            RBSetAppEnabled(bundleID, YES, ^(BOOL saved, NSError *error) {
+                assert(saved && !error);
+                appChanges++;
+            });
+        PumpUntil(^BOOL { return appChanges == 2; });
+        NSArray *enabledApps = RBBridgeRequest(Request(@"read"))[@"values"][@"enabledApps"];
+        assert(enabledApps.count == 3 && [enabledApps containsObject:@"test.concurrent.a"] &&
+            [enabledApps containsObject:@"test.concurrent.b"]);
+        assert(RBWriteSetting(@"toolbarScale", @0.6));
+        assert(RBWriteSetting(@"toolbarScale", @1.5));
+        PumpUntil(^BOOL {
+            return [RBBridgeRequest(Request(@"read"))[@"values"][@"toolbarScale"] isEqual:@1.5];
+        });
         assert(RBSaveBrushColor(0, @[@0.1,@0.2,@0.3,@1]));
         assert(RBSaveBrushColor(1, @[@0.8,@0.4,@0.1,@1]));
         assert(([RBBrushColorForSlot(0) isEqual:@[@0.1,@0.2,@0.3,@1]]));
@@ -234,7 +343,64 @@ int main(int argc, const char *argv[]) {
         Refresh();
         assert(ticks >= 5 && -start.timeIntervalSinceNow < 2.0);
         assert(RBBallForBundle(@"tv.danmaku.bilianime"));
+        NSDictionary *beforeTimeout = [gSnapshot copy];
+        __block BOOL appTimedOut = NO;
+        RBSetAppEnabled(@"test.reader", YES, ^(BOOL saved, NSError *error) {
+            assert(NSThread.isMainThread && !saved && error);
+            assert([gSnapshot isEqual:beforeTimeout]);
+            appTimedOut = YES;
+        });
+        PumpUntil(^BOOL { return appTimedOut; });
+        assert([gSnapshot isEqual:beforeTimeout]);
         [timer invalidate];
+        [server terminate]; [server waitUntilExit];
+
+        gTestDomain = [gTestDomain stringByAppendingString:@".catalog-failure"];
+        server = StartServer(@"--catalog-unavailable");
+        __block BOOL failedCatalog = NO;
+        RBLoadApplications(^(NSArray<NSDictionary *> *apps, NSError *error) {
+            assert(NSThread.isMainThread && !apps && error);
+            failedCatalog = YES;
+        });
+        PumpUntil(^BOOL { return failedCatalog; });
+        [server terminate]; [server waitUntilExit];
+
+        gTestDomain = [gTestDomain stringByAppendingString:@".write-failure"];
+        server = StartServer(@"--write-fails");
+        __block BOOL failedWrite = NO;
+        RBSetAppEnabled(@"test.reader", YES, ^(BOOL saved, NSError *error) {
+            assert(NSThread.isMainThread && !saved && error);
+            assert(![RBSetting(@"enabledApps", @[]) containsObject:@"test.reader"]);
+            failedWrite = YES;
+        });
+        PumpUntil(^BOOL { return failedWrite; });
+        [server terminate]; [server waitUntilExit];
+
+        gTestDomain = [gTestDomain stringByAppendingString:@".silent-write"];
+        server = StartServer(@"--write-silent");
+        __block BOOL silentWriteRejected = NO;
+        RBSetAppEnabled(@"test.reader", YES, ^(BOOL saved, NSError *error) {
+            assert(NSThread.isMainThread && !saved && error);
+            assert(![RBSetting(@"enabledApps", @[]) containsObject:@"test.reader"]);
+            silentWriteRejected = YES;
+        });
+        PumpUntil(^BOOL { return silentWriteRejected; });
+        response = RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"appEnabled",
+            @"bundle":@"test.reader", @"enabled":@YES});
+        assert(response && ![response[@"saved"] boolValue]);
+        assert(![response[@"enabledApps"] containsObject:@"test.reader"]);
+        [server terminate]; [server waitUntilExit];
+
+        gTestDomain = [gTestDomain stringByAppendingString:@".lost-ack"];
+        server = StartServer(@"--lost-app-ack");
+        __block BOOL recoveredWrite = NO;
+        RBSetAppEnabled(@"test.reader", YES, ^(BOOL saved, NSError *error) {
+            assert(NSThread.isMainThread && saved && !error);
+            assert([RBSetting(@"enabledApps", @[]) containsObject:@"test.reader"]);
+            recoveredWrite = YES;
+        });
+        PumpUntil(^BOOL { return recoveredWrite; });
+        assert([RBBridgeRequest(Request(@"read"))[@"values"][@"enabledApps"] containsObject:@"test.reader"]);
         [server terminate]; [server waitUntilExit];
         NSLog(@"Cephei precedence, sandbox fallback, cy/lh transport, validation, snapshot retention and timeout passed.");
     }

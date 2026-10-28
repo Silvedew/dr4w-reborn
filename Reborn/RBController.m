@@ -6,6 +6,8 @@
 #import "RBIconStyle.h"
 #import "RBToolbarLayout.h"
 #import "RBBrushPopover.h"
+#import "RBSettingsPanel.h"
+#import "RBSettingsPanelLayout.h"
 #import "RBBrushLayout.h"
 #import "RBSettings.h"
 
@@ -13,6 +15,13 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+
+@interface RBToolbarScrollView : UIScrollView
+@end
+
+@implementation RBToolbarScrollView
+- (BOOL)touchesShouldCancelInContentView:(UIView *)view { return YES; }
+@end
 
 
 #pragma mark - controller
@@ -23,9 +32,10 @@
     UIView         *_bar;
     UIScrollView   *_barScroll;
     NSArray<UIButton *> *_barButtons;
-    UIButton       *_dragHandle;
     UIPanGestureRecognizer *_barPan;
     RBToolbarPosition _toolbarPosition;
+    CGFloat _toolbarScale;
+    BOOL _previewingToolbarScale;
     CGPoint _dragOrigin;
 
     UIButton       *_brush;
@@ -36,6 +46,9 @@
     RBBrushPopover *_brushPanel;
     UIControl      *_brushDismissArea;
     __weak UIButton *_brushAnchor;
+    RBSettingsPanel *_settingsPanel;
+    UIControl *_settingsDismissArea;
+    CGRect _keyboardScreenFrame;
 
 }
 
@@ -44,6 +57,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     _toolbarPosition = RBToolbarPositionForApp(NSBundle.mainBundle.bundleIdentifier);
+    _toolbarScale = [RBPrefs toolbarScale];
     self.view.backgroundColor = [UIColor clearColor];
 
     _drawView = [[ACEDrawingView alloc] initWithFrame:self.view.bounds];
@@ -59,7 +73,13 @@
     [self.view addSubview:_drawView];
 
     [self buildBar];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(keyboardChanged:)
+        name:UIKeyboardWillChangeFrameNotification object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(keyboardChanged:)
+        name:UIKeyboardWillHideNotification object:nil];
 }
+
+- (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
 
 #pragma mark - toolbar
 
@@ -80,27 +100,17 @@
 - (void)buildBar {
     _bar = [[RBChromeSurface alloc] initWithFrame:CGRectZero];
     [self.view addSubview:_bar];
-    _dragHandle = [[RBChromeButton alloc] initWithFrame:CGRectZero];
-    _dragHandle.accessibilityLabel = @"移动工具栏";
-    _dragHandle.accessibilityHint = @"拖动调整位置，或使用上下左右移动辅助操作";
-    _dragHandle.largeContentTitle = @"移动工具栏";
-    _dragHandle.accessibilityCustomActions = @[
-        [[UIAccessibilityCustomAction alloc] initWithName:@"向上移动" target:self selector:@selector(moveToolbarUp:)],
-        [[UIAccessibilityCustomAction alloc] initWithName:@"向下移动" target:self selector:@selector(moveToolbarDown:)],
-        [[UIAccessibilityCustomAction alloc] initWithName:@"向左移动" target:self selector:@selector(moveToolbarLeft:)],
-        [[UIAccessibilityCustomAction alloc] initWithName:@"向右移动" target:self selector:@selector(moveToolbarRight:)]];
-    UIView *grip = [[UIView alloc] initWithFrame:CGRectMake(12, 20, 20, 4)];
-    grip.backgroundColor = UIColor.secondaryLabelColor;
-    grip.layer.cornerRadius = 2;
-    grip.userInteractionEnabled = NO;
-    [_dragHandle addSubview:grip];
     _barPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(dragToolbar:)];
-    [_dragHandle addGestureRecognizer:_barPan];
-    [_bar addSubview:_dragHandle];
-    _barScroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
+    _barPan.maximumNumberOfTouches = 1;
+    _barPan.cancelsTouchesInView = YES;
+    [_bar addGestureRecognizer:_barPan];
+    _barScroll = [[RBToolbarScrollView alloc] initWithFrame:CGRectZero];
     _barScroll.showsVerticalScrollIndicator = NO;
     _barScroll.showsHorizontalScrollIndicator = NO;
     _barScroll.delaysContentTouches = NO;
+    _barScroll.canCancelContentTouches = YES;
+    _barScroll.panGestureRecognizer.minimumNumberOfTouches = 2;
+    _barScroll.panGestureRecognizer.maximumNumberOfTouches = 2;
     _barScroll.directionalLockEnabled = YES;
     _barScroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     _barScroll.layer.cornerRadius = 22;
@@ -109,6 +119,12 @@
     _brush = [self barButton:@RB_PENCIL_SYMBOL label:@"画笔设置" action:@selector(showBrushFromButton:)];
     _brush.accessibilityValue = [NSString stringWithFormat:@"粗细 %.0f 磅", [RBPrefs lineWidth]];
     _gear  = [self barButton:@RB_SETTINGS_SYMBOL label:@"绘图设置" action:@selector(settingsTapped:)];
+    _gear.accessibilityHint = @"单指拖动工具栏，双指滚动按钮；辅助操作可移动工具栏";
+    _gear.accessibilityCustomActions = @[
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向上移动工具栏" target:self selector:@selector(moveToolbarUp:)],
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向下移动工具栏" target:self selector:@selector(moveToolbarDown:)],
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向左移动工具栏" target:self selector:@selector(moveToolbarLeft:)],
+        [[UIAccessibilityCustomAction alloc] initWithName:@"向右移动工具栏" target:self selector:@selector(moveToolbarRight:)]];
     _undo  = [self barButton:@"arrow.uturn.backward" label:@"撤销上一笔" action:@selector(undoTapped:)];
     _clear = [self barButton:@"trash" label:@"清空画板" action:@selector(clearTapped:)];
     _close = [self barButton:@"xmark" label:@"关闭画板" action:@selector(closeTapped:)];
@@ -120,19 +136,48 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     UIEdgeInsets insets = self.view.safeAreaInsets;
+    RBToolbarMetrics metrics = RBToolbarMetricsForScale(_toolbarScale);
     RBToolbarLayout layout = RBLayoutToolbar(self.view.bounds.size.width, self.view.bounds.size.height,
-        insets.top, insets.left, insets.bottom, insets.right, _toolbarPosition);
+        insets.top, insets.left, insets.bottom, insets.right, _toolbarPosition, _toolbarScale);
     _bar.frame = CGRectMake(layout.x, layout.y, layout.width, layout.height);
-    _dragHandle.frame = CGRectMake(RBToolbarPadding, layout.height - RBToolbarPadding - RBToolbarHandle,
-        RBToolbarHandle, RBToolbarHandle);
-    _barScroll.frame = CGRectMake(0, RBToolbarScrollTop, layout.width,
-        MAX(0, layout.height - RBToolbarScrollTop - RBToolbarGap - RBToolbarHandle - RBToolbarPadding));
-    _barScroll.contentSize = CGSizeMake(RBToolbarThickness, RBToolbarContentLength);
+    _bar.layer.cornerRadius = 22 * _toolbarScale;
+    _barScroll.layer.cornerRadius = 22 * _toolbarScale;
+    _barScroll.frame = CGRectMake(0, metrics.padding, layout.width,
+        MAX(0, layout.height - 2 * metrics.padding));
+    _barScroll.contentSize = CGSizeMake(layout.width, metrics.contentLength);
+    CGFloat maximumOffset = MAX(0, metrics.contentLength - _barScroll.bounds.size.height);
+    _barScroll.contentOffset = CGPointMake(0, MIN(MAX(0, _barScroll.contentOffset.y), maximumOffset));
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration
+        configurationWithPointSize:metrics.icon weight:UIImageSymbolWeightSemibold];
     for (NSUInteger i = 0; i < _barButtons.count; i++) {
-        CGFloat position = i * (RBToolbarButton + RBToolbarGap);
-        _barButtons[i].frame = CGRectMake(RBToolbarPadding, position, RBToolbarButton, RBToolbarButton);
+        UIButton *button = _barButtons[i];
+        CGFloat position = i * (metrics.button + metrics.gap);
+        button.frame = CGRectMake((layout.width - metrics.button) / 2, position, metrics.button, metrics.button);
+        button.layer.cornerRadius = 14 * _toolbarScale;
+        [button setPreferredSymbolConfiguration:configuration forImageInState:UIControlStateNormal];
     }
     [self layoutBrushPanel];
+    [self layoutSettingsPanel];
+}
+
+- (void)previewToolbarScale:(CGFloat)scale {
+    _toolbarScale = RBToolbarScale(scale);
+    if (!self.isViewLoaded) return;
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
+}
+
+- (void)commitToolbarScale:(CGFloat)scale {
+    [RBPrefs setToolbarScale:RBToolbarScale(scale)];
+    [self previewToolbarScale:scale];
+}
+
+- (void)refreshToolbarPreferences {
+    if (!_previewingToolbarScale) {
+        [self previewToolbarScale:[RBPrefs toolbarScale]];
+        _settingsPanel.toolbarScale = _toolbarScale;
+    }
+    [_settingsPanel refreshApplicationStates];
 }
 
 - (void)layoutBrushPanel {
@@ -150,9 +195,9 @@
     UIEdgeInsets insets = self.view.safeAreaInsets;
     CGSize size = self.view.bounds.size;
     RBToolbarLayout minimum = RBLayoutToolbar(size.width, size.height,
-        insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){0, 0});
+        insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){0, 0}, _toolbarScale);
     RBToolbarLayout maximum = RBLayoutToolbar(size.width, size.height,
-        insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){1, 1});
+        insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){1, 1}, _toolbarScale);
     _toolbarPosition = RBToolbarPositionForOrigin(minimum, maximum, origin.x, origin.y, _toolbarPosition);
     [self.view setNeedsLayout];
     [self.view layoutIfNeeded];
@@ -209,115 +254,102 @@
 
 #pragma mark - settings
 
-- (void)anchor:(UIAlertController *)sheet to:(UIView *)view {
-    UIPopoverPresentationController *pop = sheet.popoverPresentationController;
-    if (pop) {
-        pop.sourceView = view;
-        pop.sourceRect = view.bounds;
-        pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
-    }
-}
-
 - (void)settingsTapped:(UIButton *)sender {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"绘图设置"
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleActionSheet];
-
-    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"工具：%@", [RBPrefs toolName]]
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self showTools]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"画笔设置"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self showBrushFromButton:self->_gear]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"悬浮球大小"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self showBallSize]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"悬浮球透明度"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *a) { [self showBallAlpha]; }]];
-    if (!RBIsSpringBoard()) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"本次使用隐藏圆球"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *a) { [self toggleAppBall]; }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"一键清屏"
-                                              style:UIAlertActionStyleDestructive
-                                            handler:^(UIAlertAction *a) { [self->_drawView clear]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-
-    [self anchor:sheet to:sender];
-    [self presentViewController:sheet animated:YES completion:nil];
+    if (_settingsPanel) return;
+    [self closeBrushPanel];
+    _settingsPanel = [RBSettingsPanel new];
+    _settingsPanel.toolbarScale = _toolbarScale;
+    __weak typeof(self) weakSelf = self;
+    _settingsPanel.closeHandler = ^{ [weakSelf closeSettingsPanel]; };
+    _settingsPanel.brushHandler = ^{
+        RBController *controller = weakSelf;
+        if (!controller) return;
+        [controller closeSettingsPanel];
+        [controller showBrushFromButton:controller->_gear];
+    };
+    _settingsPanel.clearHandler = ^{
+        RBController *controller = weakSelf;
+        if (controller) [controller->_drawView clear];
+    };
+    _settingsPanel.hideBallHandler = ^{ [[RBFloating shared] hideTemporarily]; };
+    _settingsPanel.toolChange = ^(ACEDrawingToolType tool) {
+        RBController *controller = weakSelf;
+        if (controller) controller->_drawView.drawTool = tool;
+    };
+    _settingsPanel.toolbarScaleChange = ^(CGFloat scale) {
+        RBController *controller = weakSelf;
+        if (!controller) return;
+        controller->_previewingToolbarScale = YES;
+        [controller previewToolbarScale:scale];
+    };
+    _settingsPanel.toolbarScaleCommit = ^(CGFloat scale) {
+        RBController *controller = weakSelf;
+        if (!controller) return;
+        controller->_previewingToolbarScale = NO;
+        [controller commitToolbarScale:scale];
+    };
+    _settingsDismissArea = [[UIControl alloc] initWithFrame:self.view.bounds];
+    _settingsDismissArea.backgroundColor = UIColor.clearColor;
+    _settingsDismissArea.opaque = NO;
+    [_settingsDismissArea addTarget:self action:@selector(closeSettingsPanel) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_settingsDismissArea];
+    [self addChildViewController:_settingsPanel];
+    [self layoutSettingsPanel];
+    [self.view addSubview:_settingsPanel.view];
+    [_settingsPanel didMoveToParentViewController:self];
+    UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, _settingsPanel.view);
 }
 
-- (void)showTools {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"绘图工具"
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray<NSString *> *names = [RBPrefs toolNames];
-    NSArray<NSNumber *> *types = @[@(ACEDrawingToolTypePen), @(ACEDrawingToolTypeLine),
-                                   @(ACEDrawingToolTypeArrow), @(ACEDrawingToolTypeRectagleStroke),
-                                   @(ACEDrawingToolTypeRectagleFill), @(ACEDrawingToolTypeEllipseStroke),
-                                   @(ACEDrawingToolTypeEllipseFill), @(ACEDrawingToolTypeEraser),
-                                   @(ACEDrawingToolTypeDraggableText), @(ACEDrawingToolTypeTriangleStroke),
-                                   @(ACEDrawingToolTypePentagonStroke), @(ACEDrawingToolTypeHexagoneStroke)];
-    for (NSUInteger i = 0; i < names.count && i < types.count; i++) {
-        ACEDrawingToolType t = (ACEDrawingToolType)[types[i] integerValue];
-        [sheet addAction:[UIAlertAction actionWithTitle:names[i]
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *a) {
-            [RBPrefs setTool:t];
-            self->_drawView.drawTool = t;
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [self anchor:sheet to:_gear];
-    [self presentViewController:sheet animated:YES completion:nil];
+- (void)keyboardChanged:(NSNotification *)notification {
+    _keyboardScreenFrame = [notification.name isEqualToString:UIKeyboardWillHideNotification]
+        ? CGRectZero : [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    [self layoutSettingsPanel];
 }
 
-- (void)showBallSize {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"悬浮球大小"
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray<NSNumber *> *sizes = @[@44.0, @56.0, @64.0];
-    NSArray<NSString *> *names = @[@"小", @"中", @"大"];
-    for (NSUInteger i = 0; i < sizes.count; i++) {
-        [sheet addAction:[UIAlertAction actionWithTitle:names[i]
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *a) {
-            [RBPrefs setBallSize:sizes[i].doubleValue];
-            [[RBFloating shared] applyPrefs];
-        }]];
+- (void)layoutSettingsPanel {
+    if (!_settingsPanel) return;
+    CGRect safe = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
+    if (!CGRectIsEmpty(_keyboardScreenFrame) && self.view.window) {
+        CGRect keyboard = [self.view convertRect:_keyboardScreenFrame
+            fromCoordinateSpace:self.view.window.screen.coordinateSpace];
+        CGRect intersection = CGRectIntersection(safe, keyboard);
+        if (!CGRectIsNull(intersection) && !CGRectIsEmpty(intersection)) {
+            RBSettingsPanelHost available = RBSettingsPanelHostAvoidingKeyboard(
+                (RBSettingsPanelHost){safe.origin.x, safe.origin.y, safe.size.width, safe.size.height},
+                (RBSettingsPanelHost){keyboard.origin.x, keyboard.origin.y, keyboard.size.width, keyboard.size.height});
+            safe = CGRectMake(available.x, available.y, available.width, available.height);
+        }
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [self anchor:sheet to:_gear];
-    [self presentViewController:sheet animated:YES completion:nil];
+    [_settingsPanel updateAvailableSize:safe.size];
+    CGSize size = _settingsPanel.preferredContentSize;
+    CGRect anchor = [_gear convertRect:_gear.bounds toView:self.view];
+    BOOL right = CGRectGetMidX(_bar.frame) < CGRectGetMidX(safe);
+    CGFloat x = right ? CGRectGetMaxX(_bar.frame) + 8 : CGRectGetMinX(_bar.frame) - 8 - size.width;
+    x = RBBrushClampOrigin(x, CGRectGetMinX(safe) + 12, CGRectGetMaxX(safe) - 12 - size.width);
+    CGFloat y = RBBrushClampOrigin(CGRectGetMidY(anchor) - size.height / 2,
+        CGRectGetMinY(safe) + 12, CGRectGetMaxY(safe) - 12 - size.height);
+    _settingsDismissArea.frame = self.view.bounds;
+    _settingsPanel.view.frame = CGRectMake(x, y, size.width, size.height);
 }
 
-- (void)showBallAlpha {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"悬浮球透明度"
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray<NSNumber *> *values = @[@0.6, @0.8, @1.0];
-    NSArray<NSString *> *names = @[@"60%", @"80%", @"100%"];
-    for (NSUInteger i = 0; i < values.count; i++) {
-        [sheet addAction:[UIAlertAction actionWithTitle:names[i]
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *a) {
-            [RBPrefs setBallAlpha:values[i].doubleValue];
-            [[RBFloating shared] applyPrefs];
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [self anchor:sheet to:_gear];
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
-- (void)toggleAppBall {
-    [[RBFloating shared] hideTemporarily];
+- (void)closeSettingsPanel {
+    if (!_settingsPanel) return;
+    [_settingsPanel commitPendingChanges];
+    [_settingsPanel.view endEditing:YES];
+    [_settingsPanel willMoveToParentViewController:nil];
+    [_settingsPanel.view removeFromSuperview];
+    [_settingsPanel removeFromParentViewController];
+    [_settingsDismissArea removeFromSuperview];
+    _settingsPanel = nil;
+    _settingsDismissArea = nil;
+    _keyboardScreenFrame = CGRectZero;
+    if (self.view.window && !self.view.window.hidden)
+        UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, _gear);
 }
 
 - (void)showBrushFromButton:(UIButton *)sender {
     if (_brushPanel) return;
+    [self closeSettingsPanel];
     if (self.presentedViewController) {
         [self.presentedViewController dismissViewControllerAnimated:YES completion:^{
             [self showBrushFromButton:sender];

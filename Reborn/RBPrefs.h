@@ -34,6 +34,9 @@
 + (CGFloat)ballAlpha;                /* 0.6 / 0.8 / 1.0 */
 + (void)setBallAlpha:(CGFloat)alpha;
 
++ (CGFloat)toolbarScale;
++ (void)setToolbarScale:(CGFloat)scale;
+
 /* per-app switch */
 + (BOOL)isAppDisabled:(NSString *)bundleID;
 

@@ -59,18 +59,22 @@ they do not establish real App Store sandbox/IPC behavior.
     legible over a busy app. Enable Reduce Transparency and Increase Contrast:
     toolbar material becomes solid and its boundary remains clear. Enable Reduce
     Motion: button feedback must not scale. Verify VoiceOver announces each action.
-14. Move the toolbar using its fixed 44-point bottom handle. Verify buttons do not trigger
+14. Drag from the toolbar's background and each of its five buttons using one finger;
+    there must be no separate drag handle. Verify buttons do not trigger
     while moving, release keeps the position without snapping, and outside-bar
     gestures continue drawing. Resize Split View and rotate: the toolbar keeps
     its relative position within safe areas and always remains vertical. In short
-    windows, scroll to all five 44-point controls above the handle, which stays visible.
+    windows, use two fingers to scroll to all five controls without moving the toolbar.
     Close/reopen the panel, quit/reopen the app, and respring: the app's own
     position is restored. Move a second app's toolbar elsewhere and verify the
     positions remain independent. No reset-position menu should appear.
-    Verify VoiceOver's four directional handle actions. Confirm ball dragging,
+    Verify the Settings button's four directional VoiceOver actions. Confirm ball dragging,
     temporary hiding and idle fade timing still behave as before.
 15. Increase text size in Settings, reopen App Enable, and verify duplicate app
     identifiers remain legible, row heights grow, and switches stay operable.
+    Search by part of an App name and then by its bundle identifier, including
+    mixed case and surrounding spaces. Verify no-results feedback, clear to
+    restore the list, and toggle a filtered result without changing any other App.
 16. Tap Pencil between Clear and Undo. Verify the 60-point wide
     panel uses a single centered column: four unlabeled color circles, a ring on
     the selected slot, the upright width number, and a close icon. The panel
@@ -113,6 +117,21 @@ they do not establish real App Store sandbox/IPC behavior.
     Backgrounding, temporarily hiding, disabling an app or opening drawing must
     not restore a hidden ball when rotation completes. Source guards and layout
     tests cannot establish that UIKit compositing artifacts are gone.
+
+18. Open Settings from the toolbar. Check the main menu, tool selector, ball size,
+    opacity, toolbar size and App pages in light/dark mode, Reduce Transparency,
+    Increase Contrast and large text. All use the brush panel's rounded material;
+    back, close, Escape and outside taps must work without drawing underneath.
+    Adjust toolbar size to 60%, 100% and 150%: preview is immediate, targets stay
+    at least 44 points, and release/close preserves the size in another App,
+    on the home screen and after restarting. Brush panel size stays unchanged.
+19. In toolbar App management, search names and bundle IDs, scroll, enable a
+    different App and check system Settings reflects the change. With the
+    keyboard open, rotate and resize Split View: search and results stay inside
+    the usable area. Turn off the current App: cancel preserves the drawing;
+    confirm closes drawing and the ball. Failed saves and directory loads show
+    retry feedback, preserve other Apps, and do not freeze the UI. After searching
+    or canceling confirmation, retry must never change the wrong App.
 
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,

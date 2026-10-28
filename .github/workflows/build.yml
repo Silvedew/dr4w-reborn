@@ -26,13 +26,15 @@ jobs:
           /tmp/rb-policy-tests
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/toolbar_layout_test.c -o /tmp/rb-toolbar-tests
           /tmp/rb-toolbar-tests
+          clang -std=c11 -Wall -Wextra -Werror -IShared tests/settings_panel_layout_test.c -o /tmp/rb-settings-panel-tests
+          /tmp/rb-settings-panel-tests
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/stroke_width_test.c -o /tmp/rb-width-tests
           /tmp/rb-width-tests
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/brush_layout_test.c -o /tmp/rb-brush-tests
           /tmp/rb-brush-tests
           clang -std=c11 -Wall -Wextra -Werror -IShared tests/floating_layout_test.c -o /tmp/rb-floating-tests
           /tmp/rb-floating-tests
-          clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m tests/FakeHBPreferences.m -o /tmp/rb-settings-tests
+          clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/SettingsTests.m tests/FakeHBPreferences.m Shared/RBAppCatalog.m -o /tmp/rb-settings-tests
           /tmp/rb-settings-tests
           clang -fobjc-arc -Itests/stubs -IShared -framework Foundation -framework CoreFoundation tests/PreferencesControllerTests.m tests/FakeHBPreferences.m -o /tmp/rb-controller-tests
           /tmp/rb-controller-tests
@@ -70,8 +72,8 @@ jobs:
           set -euxo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           COMMON=(-isysroot "$SDK" -miphoneos-version-min=15.0 -fobjc-arc -O2 -IShared -F "$PWD/.deps/cephei/cephei_sdk_2.0" -framework Foundation -framework UIKit -framework MobileCoreServices -framework Cephei -Wl,-rpath,/var/jb/Library/Frameworks -dynamiclib -undefined dynamic_lookup -install_name /var/jb/Library/PreferenceBundles/Dr4wRebornPrefs.bundle/Dr4wRebornPrefs)
-          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 "${COMMON[@]}" Preferences/RBRootListController.m Shared/RBSettingsStore.m -o Prefs-arm64
-          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 "${COMMON[@]}" Preferences/RBRootListController.m Shared/RBSettingsStore.m -o Prefs-arm64e
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 "${COMMON[@]}" Preferences/RBRootListController.m Shared/RBSettingsStore.m Shared/RBAppCatalog.m -o Prefs-arm64
+          xcrun --sdk iphoneos clang -target arm64e-apple-ios15.0 "${COMMON[@]}" Preferences/RBRootListController.m Shared/RBSettingsStore.m Shared/RBAppCatalog.m -o Prefs-arm64e
           lipo -create Prefs-arm64 Prefs-arm64e -output Dr4wRebornPrefs
 
       - name: Verify Cephei dependencies and rootless search paths

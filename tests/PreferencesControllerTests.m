@@ -11,8 +11,12 @@ static Class RBTestLookupClass(NSString *name) {
 #define LSApplicationProxy RBFixtureApplicationProxy
 #define LSApplicationWorkspace RBFixtureApplicationWorkspace
 #define NSClassFromString RBTestLookupClass
+#define RBSetAppEnabled RBFixtureSetAppEnabled
+static void RBFixtureSetAppEnabled(NSString *bundleID, BOOL enabled, void (^completion)(BOOL, NSError *));
+#import "../Shared/RBAppCatalog.m"
 #import "../Preferences/RBRootListController.m"
 #undef NSClassFromString
+#undef RBSetAppEnabled
 #import "../Shared/RBSettingsStore.m"
 #include <assert.h>
 
@@ -58,8 +62,28 @@ static NSMutableDictionary *gIconReads;
 @end
 
 @implementation UIViewController
+- (void)viewDidLoad {}
+- (void)viewWillAppear:(BOOL)animated {}
 - (void)presentViewController:(UIViewController *)controller animated:(BOOL)animated completion:(void (^)(void))completion {
     if (completion) completion();
+}
+@end
+@implementation UISearchBar
+@end
+@implementation UISearchController
+- (instancetype)initWithSearchResultsController:(UIViewController *)controller {
+    if ((self = [super init])) self.searchBar = [UISearchBar new];
+    return self;
+}
+@end
+@implementation UINavigationItem
+@end
+@implementation UIViewController (RBNavigationItem)
+- (UINavigationItem *)navigationItem {
+    static UINavigationItem *item;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ item = [UINavigationItem new]; });
+    return item;
 }
 @end
 @implementation UIAlertAction
@@ -128,10 +152,38 @@ static NSMutableDictionary *gIconReads;
 @implementation LSApplicationProxy
 @end
 static NSArray *gInstalledApps;
+static NSUInteger gWorkspaceReads;
+static BOOL gWorkspaceThrows;
 @implementation LSApplicationWorkspace
 + (instancetype)defaultWorkspace { return [self new]; }
-- (NSArray *)allInstalledApplications { return gInstalledApps; }
+- (NSArray *)allInstalledApplications {
+    gWorkspaceReads++;
+    if (gWorkspaceThrows) @throw [NSException exceptionWithName:@"fixture" reason:nil userInfo:nil];
+    return gInstalledApps;
+}
 @end
+
+static void (^gPendingAppSave)(BOOL, NSError *);
+static NSString *gPendingBundle;
+static BOOL gPendingEnabled;
+static void RBFixtureSetAppEnabled(NSString *bundleID, BOOL enabled, void (^completion)(BOOL, NSError *)) {
+    gPendingBundle = [bundleID copy];
+    gPendingEnabled = enabled;
+    gPendingAppSave = [completion copy];
+}
+
+static void CompleteAppSave(BOOL saved) {
+    assert(gPendingAppSave != nil);
+    if (saved) {
+        NSMutableArray *enabledApps = [RBSetting(@"enabledApps", @[]) mutableCopy];
+        [enabledApps removeObject:gPendingBundle];
+        if (gPendingEnabled) [enabledApps addObject:gPendingBundle];
+        assert(RBWriteSetting(@"enabledApps", enabledApps));
+    }
+    void (^completion)(BOOL, NSError *) = gPendingAppSave;
+    gPendingAppSave = nil;
+    completion(saved, saved ? nil : [NSError errorWithDomain:@"tests" code:1 userInfo:nil]);
+}
 
 static LSApplicationProxy *App(NSString *identifier, NSString *name) {
     LSApplicationProxy *app = [LSApplicationProxy new];
@@ -196,9 +248,33 @@ int main(void) {
             AppWithInfo(fixtureRoot, @"test.background", @{@"LSBackgroundOnly":@YES}),
             AppWithInfo(fixtureRoot, @"test.helper", @{@"LSUIElement":@YES}),
             AppWithInfo(fixtureRoot, @"test.bundle", @{@"CFBundlePackageType":@"BNDL"}),
-            AppWithInfo(fixtureRoot, @"test.appextension", @{@"NSExtension":@{}})];
+            AppWithInfo(fixtureRoot, @"test.appextension", @{@"NSExtension":@{}}),
+            AppWithInfo(fixtureRoot, @"test.malformed-ui-element", @{@"LSUIElement":@[@"bad"]}),
+            AppWithInfo(fixtureRoot, @"test.malformed-background", @{@"LSBackgroundOnly":@{@"bad":@YES}})];
+        NSArray *installedFixtures = gInstalledApps;
+        NSArray *catalog = RBInstalledApplications();
+        assert(catalog.count == 4);
+        gWorkspaceThrows = YES;
+        assert(RBInstalledApplications() == nil);
+        gWorkspaceThrows = NO;
+        assert([RBFilterApplications(catalog, @"  readER  ").count == 2);
+        assert([RBFilterApplications(catalog, @"test.notes").count == 1);
+        assert([RBFilterApplications(catalog, @"READER.ALT").count == 1);
+        assert([RBFilterApplications(catalog, @" ").count == catalog.count);
+        assert([RBFilterApplications(catalog, @"no such app").count == 0);
+        assert([RBFilterApplications(catalog, @"").count == catalog.count);
+        NSArray *nfc = RBFilterApplications(@[@{@"id":@"test.nfc", @"name":@"Café"}], @"Cafe\u0301");
+        assert(nfc.count == 1);
+        gInstalledApps = nil;
+        assert(RBInstalledApplications() == nil);
+        RBAppListController *failedApps = [RBAppListController new];
+        assert([[failedApps.specifiers[0] propertyForKey:@"footerText"] containsString:@"无法读取"]);
+        gInstalledApps = @[];
+        assert(RBInstalledApplications() != nil && RBInstalledApplications().count == 0);
+        gInstalledApps = installedFixtures;
         assert(RBWriteSetting(@"enabledApps", @[@"test.hidden"]));
         RBAppListController *apps = [detail new];
+        [apps viewDidLoad];
         NSArray *appRows = apps.specifiers;
         assert([apps.title isEqualToString:@"App 启用"]);
         assert(appRows.count == 5); // Group plus four real apps.
@@ -215,12 +291,20 @@ int main(void) {
             assert(RowForApp(appRows, bundleID) == nil);
         assert(![[apps readPreferenceValue:notes] boolValue]);
         [apps setPreferenceValue:@YES specifier:notes];
+        assert(gPendingAppSave != nil && [gPendingBundle isEqualToString:@"test.notes"]);
+        assert(![[RowForApp(apps.specifiers, @"test.notes") propertyForKey:@"enabled"] boolValue]);
+        [apps setPreferenceValue:@NO specifier:notes]; // Ignore repeated operation while the save is pending.
+        assert(gPendingEnabled);
+        CompleteAppSave(YES);
         assert([[apps readPreferenceValue:notes] boolValue]);
+        assert([[RowForApp(apps.specifiers, @"test.notes") propertyForKey:@"enabled"] boolValue]);
         assert(RBBallForBundle(@"test.notes"));
         assert([RBSetting(@"enabledApps", @[]) containsObject:@"test.hidden"]);
         [apps setPreferenceValue:@NO specifier:notes];
-        assert(![[apps readPreferenceValue:notes] boolValue]);
-        assert(!RBBallForBundle(@"test.notes"));
+        CompleteAppSave(NO);
+        assert([[apps readPreferenceValue:notes] boolValue]);
+        assert(RBBallForBundle(@"test.notes"));
+        assert([[RowForApp(apps.specifiers, @"test.notes") propertyForKey:@"enabled"] boolValue]);
         NSUInteger readerIndex = [appRows indexOfObject:RowForApp(appRows, @"test.reader")];
         UITableViewCell *cell = [apps tableView:nil cellForRowAtIndexPath:[NSIndexPath indexPathWithIndex:readerIndex]];
         assert([cell.textLabel.attributedText.string isEqualToString:@"Reader\ntest.reader"]);
@@ -232,6 +316,24 @@ int main(void) {
         assert(cell.imageView.tintColor == nil); // App icons keep their own colors.
         assert([cell.textLabel.attributedText.string isEqualToString:@"Notes"]);
         assert(cell.textLabel.numberOfLines == 1);
+        NSUInteger readsBeforeSearch = gWorkspaceReads;
+        apps.rbSearchController.searchBar.text = @"test.reader";
+        [apps updateSearchResultsForSearchController:apps.rbSearchController];
+        assert(apps.specifiers.count == 3);
+        assert(RowForApp(apps.specifiers, @"test.reader") != nil);
+        assert(gWorkspaceReads == readsBeforeSearch);
+        apps.rbSearchController.searchBar.text = @"missing result";
+        [apps updateSearchResultsForSearchController:apps.rbSearchController];
+        assert(apps.specifiers.count == 1);
+        assert([[apps.specifiers[0] propertyForKey:@"footerText"] containsString:@"没有匹配"]);
+        [apps viewWillAppear:YES];
+        assert(apps.specifiers.count == 1);
+        assert(gWorkspaceReads == readsBeforeSearch);
+        apps.rbSearchController.searchBar.text = @"  ";
+        [apps updateSearchResultsForSearchController:apps.rbSearchController];
+        assert(apps.specifiers.count == appRows.count);
+        assert(gWorkspaceReads == readsBeforeSearch);
+        assert([gIconReads[@"test.reader"] integerValue] == 1);
         id firstIcon = [notes propertyForKey:@"iconImage"];
         [apps reloadSpecifiers];
         assert([RowForApp(apps.specifiers, @"test.notes") propertyForKey:@"iconImage"] == firstIcon);

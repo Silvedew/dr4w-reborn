@@ -1,5 +1,6 @@
 #import "RBSettings.h"
 #import "RBDiagnostics.h"
+#import "RBAppCatalog.h"
 #import <CoreFoundation/CoreFoundation.h>
 #include <math.h>
 
@@ -76,7 +77,9 @@ static BOOL RBMergeToolbarPosition(NSString *bundleID, NSDictionary *position) {
 static BOOL RBWritableDrawingKey(NSString *key, id value) {
     if (![key isKindOfClass:NSString.class]) return NO;
     NSArray *keys = @[@"toolIndex", @"colorIndex", @"hasCustom", @"cR", @"cG", @"cB", @"cA",
-        @"widthIndex", @"strokeWidth", @"floatX", @"floatY", @"ballSize", @"ballAlpha"];
+        @"widthIndex", @"strokeWidth", @"floatX", @"floatY", @"ballSize", @"ballAlpha", @"toolbarScale"];
+    if ([key isEqual:@"toolbarScale"] && value && (![value isKindOfClass:NSNumber.class] ||
+        !isfinite([value doubleValue]) || [value doubleValue] < 0.6 || [value doubleValue] > 1.5)) return NO;
     if ([key isEqual:@"strokeWidth"] && value && (![value isKindOfClass:NSNumber.class] ||
         [value doubleValue] < 1 || [value doubleValue] > 30 || round([value doubleValue]) != [value doubleValue])) return NO;
     return [keys containsObject:key] && (!value ||
@@ -100,9 +103,63 @@ static NSDictionary *RBDecode(NSData *data) {
     return [value isKindOfClass:NSDictionary.class] ? value : nil;
 }
 
+static NSArray<NSDictionary *> *gApplicationCatalog;
+static BOOL gApplicationCatalogLoading;
+
+static void RBRefreshApplicationCatalog(void) {
+    if (gApplicationCatalogLoading) return;
+    gApplicationCatalogLoading = YES;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSArray *apps;
+        @try { apps = RBInstalledApplications(); }
+        @catch (NSException *exception) {
+            RBDiagnostic(@"settings.applications", exception.name);
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            gApplicationCatalog = apps;
+            gApplicationCatalogLoading = NO;
+        });
+    });
+}
+
+static BOOL RBMergeAppEnabled(NSString *bundleID, BOOL enabled) {
+    BOOL installed = NO;
+    for (NSDictionary *app in gApplicationCatalog)
+        if ([app[@"id"] isEqual:bundleID]) { installed = YES; break; }
+    if (!installed) return NO;
+    @try {
+        id stored = [RBPreferences() objectForKey:@"enabledApps"];
+        NSMutableArray *apps = [stored isKindOfClass:NSArray.class] ? [stored mutableCopy] : [NSMutableArray array];
+        [apps removeObject:bundleID];
+        if (enabled) [apps addObject:bundleID];
+        [RBPreferences() setObject:apps forKey:@"enabledApps"];
+        id saved = [RBPreferences() objectForKey:@"enabledApps"];
+        if (![saved isKindOfClass:NSArray.class] || [saved containsObject:bundleID] != enabled) return NO;
+        return RBSignalSettingsChanged();
+    } @catch (NSException *exception) {
+        RBDiagnostic(@"settings.application", [NSString stringWithFormat:@"saved=0 exception=%@", exception.name]);
+        return NO;
+    }
+}
+
 static NSDictionary *RBHandleSettingsRequest(NSDictionary *request) {
     if (![request[@"domain"] isEqual:RB_SETTINGS_DOMAIN]) return nil;
     NSString *operation = request[@"operation"];
+    if ([operation isEqual:@"applications"] && request.count == 3 &&
+        [request[@"refresh"] isKindOfClass:NSNumber.class] &&
+        ([request[@"refresh"] isEqual:@YES] || [request[@"refresh"] isEqual:@NO])) {
+        if ([request[@"refresh"] boolValue]) RBRefreshApplicationCatalog();
+        if (gApplicationCatalogLoading) return @{@"loading": @YES};
+        return gApplicationCatalog ? @{@"applications": gApplicationCatalog} : @{@"unavailable": @YES};
+    }
+    if ([operation isEqual:@"appEnabled"] && request.count == 4 &&
+        RBValidToolbarApp(request[@"bundle"]) && ![request[@"bundle"] isEqual:@"com.apple.springboard"] &&
+        [request[@"enabled"] isKindOfClass:NSNumber.class] &&
+        ([request[@"enabled"] isEqual:@YES] || [request[@"enabled"] isEqual:@NO])) {
+        BOOL saved = RBMergeAppEnabled(request[@"bundle"], [request[@"enabled"] boolValue]);
+        id apps = [RBPreferences() objectForKey:@"enabledApps"];
+        return @{@"saved": @(saved), @"enabledApps": [apps isKindOfClass:NSArray.class] ? apps : @[]};
+    }
     if ([operation isEqual:@"read"] && request.count == 2) {
         NSDictionary *values = RBPreferences().dictionaryRepresentation;
         return values ? @{@"values": values} : nil;
@@ -149,6 +206,7 @@ void RBStartSettingsService(void) {
             CFRelease(port); // The run-loop source retains the local service.
         }
         RBSignalSettingsChanged(); // Wake already-running clients after SpringBoard registers.
+        RBRefreshApplicationCatalog();
     });
 }
 
@@ -207,6 +265,66 @@ static NSMutableArray *gSettingsObservers;
 static BOOL gRefreshPending;
 static BOOL gRefreshAgain;
 static NSMutableDictionary *gToolbarPositions;
+static NSArray *gAcknowledgedEnabledApps;
+static void RBEnsureSettingsObservation(void);
+
+static NSError *RBApplicationError(NSString *message) {
+    return [NSError errorWithDomain:RB_SETTINGS_DOMAIN code:1 userInfo:@{NSLocalizedDescriptionKey:message}];
+}
+
+void RBLoadApplications(void (^completion)(NSArray<NSDictionary *> *apps, NSError *error)) {
+    if (!completion) return;
+    // Only an explicit App-list request retries while the background catalog loads.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSDictionary *response;
+        for (NSUInteger attempt = 0; attempt < 40; attempt++) {
+            response = RBBridgeRequest(@{@"domain": RB_SETTINGS_DOMAIN, @"operation": @"applications",
+                @"refresh": @(attempt == 0)});
+            if (![response[@"loading"] boolValue]) break;
+            [NSThread sleepForTimeInterval:0.05];
+        }
+        NSArray *apps = [response[@"applications"] isKindOfClass:NSArray.class] ? response[@"applications"] : nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(apps, apps ? nil : RBApplicationError(@"无法读取 App 列表，请重试。"));
+        });
+    });
+}
+
+void RBSetAppEnabled(NSString *bundleID, BOOL enabled, void (^completion)(BOOL saved, NSError *error)) {
+    if (!RBValidToolbarApp(bundleID) || [bundleID isEqual:@"com.apple.springboard"]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(NO, RBApplicationError(@"无效的 App。"));
+        });
+        return;
+    }
+    RBLoadApplications(^(NSArray<NSDictionary *> *apps, NSError *error) {
+        if (error) { if (completion) completion(NO, error); return; }
+        BOOL installed = NO;
+        for (NSDictionary *app in apps)
+            if ([app[@"id"] isEqual:bundleID]) { installed = YES; break; }
+        if (!installed) { if (completion) completion(NO, RBApplicationError(@"此 App 已不可用。")); return; }
+        RBEnsureSettingsObservation();
+        dispatch_async(RBSettingsQueue(), ^{
+            NSDictionary *response = RBBridgeRequest(@{@"domain": RB_SETTINGS_DOMAIN, @"operation": @"appEnabled",
+                @"bundle": bundleID, @"enabled": @(enabled)});
+            // Recover the authoritative state even if an acknowledgement was lost.
+            NSDictionary *values = RBBridgeRequest(@{@"domain": RB_SETTINGS_DOMAIN, @"operation": @"read"})[@"values"];
+            id confirmedApps = values[@"enabledApps"] ?: @[];
+            BOOL saved = (!response || [response[@"saved"] boolValue]) &&
+                [values isKindOfClass:NSDictionary.class] && [confirmedApps isKindOfClass:NSArray.class] &&
+                [confirmedApps containsObject:bundleID] == enabled;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (RBSandboxPreferences() && [values isKindOfClass:NSDictionary.class]) gSnapshot = [values copy];
+                if (!RBSandboxPreferences()) {
+                    id enabledApps = values[@"enabledApps"] ?: response[@"enabledApps"];
+                    if ([enabledApps isKindOfClass:NSArray.class]) gAcknowledgedEnabledApps = [enabledApps copy];
+                }
+                if (completion) completion(saved, saved ? nil : RBApplicationError(@"App 设置未保存，请重试。"));
+                RBRefreshSettings();
+            });
+        });
+    });
+}
 
 NSArray<NSNumber *> *RBBrushColorForSlot(NSUInteger slot) {
     if (slot >= 4) return nil;
@@ -278,6 +396,7 @@ BOOL RBSaveToolbarPosition(NSString *bundleID, RBToolbarPosition position) {
 
 id RBSnapshotValue(NSString *key) {
     // Privileged processes use Cephei's local cache; app layout never performs IPC.
+    if ([key isEqual:@"enabledApps"] && gAcknowledgedEnabledApps) return gAcknowledgedEnabledApps;
     return RBSandboxPreferences() ? gSnapshot[key] : [RBPreferences() objectForKey:key];
 }
 
@@ -310,22 +429,28 @@ void RBRefreshSettings(void) {
     });
 }
 
-void RBObserveSnapshot(void (^callback)(void)) {
-    if (!gSettingsObservers) gSettingsObservers = [NSMutableArray array];
-    [gSettingsObservers addObject:[callback copy]];
+static void RBEnsureSettingsObservation(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         [RBPreferences() registerPreferenceChangeBlock:^{
             dispatch_async(dispatch_get_main_queue(), ^{
+                gAcknowledgedEnabledApps = nil;
                 if (RBSandboxPreferences()) RBRefreshSettings();
                 else RBPublishSettings();
             });
         }];
     });
+}
+
+void RBObserveSnapshot(void (^callback)(void)) {
+    if (!gSettingsObservers) gSettingsObservers = [NSMutableArray array];
+    [gSettingsObservers addObject:[callback copy]];
+    RBEnsureSettingsObservation();
     dispatch_async(dispatch_get_main_queue(), callback);
 }
 
 BOOL RBStoreSetting(NSString *key, id value) {
+    if ([key isEqual:@"toolbarScale"] && !RBWritableDrawingKey(key, value)) return NO;
     if (!RBSandboxPreferences()) {
         [RBPreferences() setObject:value forKey:key];
         return RBSignalSettingsChanged();

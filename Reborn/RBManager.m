@@ -2,6 +2,7 @@
 #import "RBWindow.h"
 #import "RBController.h"
 #import "RBBrushPopover.h"
+#import "RBSettingsPanel.h"
 #import "RBFloating.h"
 #import "RBPrefs.h"
 #import "RBSystemHooks.h"
@@ -136,6 +137,7 @@ CGRect RBHostBounds(void) {
 
     for (UIViewController *child in _window.rootViewController.childViewControllers) {
         if ([child isKindOfClass:RBBrushPopover.class]) [(RBBrushPopover *)child commitPendingChanges];
+        if ([child isKindOfClass:RBSettingsPanel.class]) [(RBSettingsPanel *)child commitPendingChanges];
     }
     _window.hidden = YES;
     _window.rootViewController = nil;
@@ -159,6 +161,10 @@ CGRect RBHostBounds(void) {
 - (void)layoutForCurrentHost {
     if (_window) _window.frame = RBHostBounds();
     [[RBFloating shared] applyPrefs];
+}
+
+- (void)applySettings {
+    [(RBController *)_window.rootViewController refreshToolbarPreferences];
 }
 
 @end
@@ -189,6 +195,7 @@ static void RBBootstrap(void) {
             (unsigned long)[UIApplication sharedApplication].connectedScenes.count]);
         RBObserveSettings(^{
             gVolumeSequence = (RBVolumeSequence){0};
+            [[RBManager shared] applySettings];
             if (!RBMayPresent()) [[RBManager shared] dismiss];
             BOOL enabled = RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier]);
             if (enabled && !wasEnabled)

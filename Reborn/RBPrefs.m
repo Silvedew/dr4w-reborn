@@ -1,6 +1,7 @@
 #import "RBPrefs.h"
 #import "RBSettings.h"
 #import "RBStrokeWidth.h"
+#import "RBToolbarLayout.h"
 
 @implementation RBPrefs
 
@@ -156,6 +157,16 @@
 
 + (void)setBallAlpha:(CGFloat)alpha {
     RBWriteSetting(@"ballAlpha", @(alpha));
+}
+
++ (CGFloat)toolbarScale {
+    id value = RBSetting(@"toolbarScale", @1);
+    double scale = [value isKindOfClass:NSNumber.class] ? [value doubleValue] : 1;
+    return isfinite(scale) && scale >= 0.6 && scale <= 1.5 ? scale : 1;
+}
+
++ (void)setToolbarScale:(CGFloat)scale {
+    if (isfinite(scale) && scale >= 0.6 && scale <= 1.5) RBWriteSetting(@"toolbarScale", @(scale));
 }
 
 #pragma mark - per-app switch

@@ -14,6 +14,13 @@ int main(void) {
         CFPreferencesSynchronize((__bridge CFStringRef)RB_SETTINGS_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         assert(RBEnabledForBundle(@"test.legacy"));
         assert([RBSetting(@"colorIndex", nil) integerValue] == 3);
+        assert(RBWriteSetting(@"toolbarScale", @0.6));
+        assert([RBSetting(@"toolbarScale", nil) doubleValue] == 0.6);
+        assert(RBWriteSetting(@"toolbarScale", @1.5));
+        for (id invalid in @[@0.59, @1.51, @(NAN), @(INFINITY), @"1.0"])
+            assert(!RBWriteSetting(@"toolbarScale", invalid));
+        assert([RBSetting(@"toolbarScale", nil) doubleValue] == 1.5);
+        assert(RBWriteSetting(@"toolbarScale", nil));
         assert(RBWriteSetting(@"toolbarPositions", @{
             @"test.reader": @{@"x":@0.2, @"y":@0.8},
             @"test.invalid": @{@"x":@2, @"y":@0},

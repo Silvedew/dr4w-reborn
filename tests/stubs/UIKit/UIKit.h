@@ -43,7 +43,30 @@ typedef NS_ENUM(NSInteger, UIImageRenderingMode) { UIImageRenderingModeAlwaysOri
 
 @interface UIViewController : NSObject
 @property (nonatomic, copy) NSString *title;
+- (void)viewDidLoad;
+- (void)viewWillAppear:(BOOL)animated;
 - (void)presentViewController:(UIViewController *)controller animated:(BOOL)animated completion:(void (^)(void))completion;
+@end
+
+@class UISearchController;
+@protocol UISearchResultsUpdating <NSObject>
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController;
+@end
+@interface UISearchBar : NSObject
+@property (nonatomic, copy) NSString *text;
+@end
+@interface UISearchController : UIViewController
+- (instancetype)initWithSearchResultsController:(UIViewController *)controller;
+@property (nonatomic, weak) id<UISearchResultsUpdating> searchResultsUpdater;
+@property (nonatomic) BOOL obscuresBackgroundDuringPresentation;
+@property (nonatomic, strong) UISearchBar *searchBar;
+@end
+@interface UINavigationItem : NSObject
+@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic) BOOL hidesSearchBarWhenScrolling;
+@end
+@interface UIViewController (RBNavigationItem)
+@property (nonatomic, strong, readonly) UINavigationItem *navigationItem;
 @end
 
 typedef NS_ENUM(NSInteger, UIAlertControllerStyle) { UIAlertControllerStyleAlert = 1 };

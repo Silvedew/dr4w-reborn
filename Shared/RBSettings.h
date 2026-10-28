@@ -20,6 +20,9 @@ BOOL RBSaveToolbarPosition(NSString *bundleID, RBToolbarPosition position);
 NSArray<NSNumber *> *RBBrushColorForSlot(NSUInteger slot);
 NSInteger RBSelectedBrushSlot(void);
 BOOL RBSaveBrushColor(NSUInteger slot, NSArray<NSNumber *> *components);
+// Both callbacks run on the main thread after the service acknowledges the request.
+void RBLoadApplications(void (^completion)(NSArray<NSDictionary *> *apps, NSError *error));
+void RBSetAppEnabled(NSString *bundleID, BOOL enabled, void (^completion)(BOOL saved, NSError *error));
 
 static inline HBPreferences *RBPreferences(void) {
     static HBPreferences *preferences;

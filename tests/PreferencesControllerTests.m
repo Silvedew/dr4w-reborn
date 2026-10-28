@@ -275,6 +275,15 @@ int main(void) {
         assert(RBWriteSetting(@"enabledApps", @[@"test.hidden"]));
         RBAppListController *apps = [detail new];
         [apps viewDidLoad];
+        NSUInteger settingsObserverCount = gSettingsObservers.count;
+        __weak RBAppListController *weakTemporaryApps;
+        @autoreleasepool {
+            RBAppListController *temporaryApps = [detail new];
+            [temporaryApps viewDidLoad];
+            weakTemporaryApps = temporaryApps;
+        }
+        assert(weakTemporaryApps == nil);
+        assert(gSettingsObservers.count == settingsObserverCount);
         NSArray *appRows = apps.specifiers;
         assert([apps.title isEqualToString:@"App 启用"]);
         assert(appRows.count == 5); // Group plus four real apps.

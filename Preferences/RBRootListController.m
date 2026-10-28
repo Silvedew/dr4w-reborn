@@ -27,6 +27,20 @@ static UIImage *RBSettingsIcon(NSString *symbol) {
 @interface RBRootListController : RBSettingsListController
 @end
 
+static NSHashTable<RBAppListController *> *gRBAppListControllers;
+
+static void RBObserveAppListController(RBAppListController *controller) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        gRBAppListControllers = [NSHashTable weakObjectsHashTable];
+        RBObserveSettings(^{
+            for (RBAppListController *listController in gRBAppListControllers.allObjects)
+                [listController refreshVisibleSpecifiers];
+        });
+    });
+    [gRBAppListControllers addObject:controller];
+}
+
 @implementation RBSettingsListController
 - (void)publishSpecifiers:(NSArray *)specifiers {
     // PSListController builds its table from its own specifier storage.
@@ -136,10 +150,7 @@ static UIImage *RBSettingsIcon(NSString *symbol) {
     self.rbSearchController.obscuresBackgroundDuringPresentation = NO;
     self.navigationItem.searchController = self.rbSearchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
-    __weak typeof(self) weakSelf = self;
-    RBObserveSettings(^{
-        [weakSelf refreshVisibleSpecifiers];
-    });
+    RBObserveAppListController(self);
 }
 
 - (void)viewWillAppear:(BOOL)animated {

@@ -1,0 +1,14 @@
+Package: com.dsh.dr4wreborn
+Name: 全局画板
+Version: 0.1.77
+Architecture: iphoneos-arm64
+Description: 全局画板 —— 任意界面手绘标注，开源可改
+Maintainer: dsh
+Author: dsh
+Section: Tweaks
+Depends: mobilesubstrate | ellekit, preferenceloader, ws.hbang.common (>= 2.0)
+Filename: https://silvedew.github.io/dr4w-reborn/Dr4wReborn_0.1.77_iphoneos-arm64.deb
+Size: 185040
+MD5sum: 2b0f1f5ee2482b77d98fe150cecfe8dc
+SHA256: dfaaeece90dabae34e80ce13bc5f5e5fcdcdee20f1c2c3aa4f071710f546758c
+

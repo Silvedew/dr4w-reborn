@@ -353,8 +353,6 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:reuseIdentifier];
     cell.backgroundColor = UIColor.clearColor;
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    CGFloat width = tableView.bounds.size.width;
-    CGFloat height = [self tableView:tableView heightForRowAtIndexPath:path];
     if (isApplication) {
         NSDictionary *app = _filteredApplications[appRow];
         NSString *bundle = app[@"id"];
@@ -390,16 +388,16 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
         return cell;
     }
     if (_page == RBSettingsToolbarSize) {
-        _scaleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 8, MAX(0, width - 32), height - 76)];
+        _scaleLabel = [UILabel new];
         _scaleLabel.numberOfLines = 0;
-        _scaleLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        _scaleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _scaleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
         _scaleLabel.adjustsFontForContentSizeCategory = YES;
         _scaleLabel.textColor = UIColor.labelColor;
         [cell.contentView addSubview:_scaleLabel];
-        _scaleSlider = [[UISlider alloc] initWithFrame:CGRectMake(20, height - 64, MAX(0, width - 40), 44)];
+        _scaleSlider = [UISlider new];
         _scaleSlider.minimumValue = 0.6;
-        _scaleSlider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        _scaleSlider.translatesAutoresizingMaskIntoConstraints = NO;
         _scaleSlider.maximumValue = 1.5;
         _scaleSlider.value = self.toolbarScale;
         _scaleSlider.tintColor = UIColor.labelColor;
@@ -409,6 +407,16 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
         [_scaleSlider addTarget:self action:@selector(scaleChanged:) forControlEvents:UIControlEventValueChanged];
         [_scaleSlider addTarget:self action:@selector(scaleReleased:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
         [cell.contentView addSubview:_scaleSlider];
+        [NSLayoutConstraint activateConstraints:@[
+            [_scaleLabel.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:16],
+            [_scaleLabel.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-16],
+            [_scaleLabel.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:8],
+            [_scaleLabel.bottomAnchor constraintEqualToAnchor:_scaleSlider.topAnchor constant:-4],
+            [_scaleSlider.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:20],
+            [_scaleSlider.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-20],
+            [_scaleSlider.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-20],
+            [_scaleSlider.heightAnchor constraintEqualToConstant:44]
+        ]];
         [self updateScaleLabel];
         return cell;
     }
@@ -416,8 +424,7 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     NSString *title = [self titleForRow:path.row selected:&selected];
     RBChromeButton *button = [self buttonWithTitle:selected ? [title stringByAppendingString:@" ✓"] : title action:@selector(rowTapped:)];
     button.tag = path.row;
-    button.frame = CGRectMake(8, 2, MAX(0, width - 16), height - 4);
-    button.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    button.translatesAutoresizingMaskIntoConstraints = NO;
     button.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);
     button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     button.accessibilityTraits = UIAccessibilityTraitButton | (selected ? UIAccessibilityTraitSelected : 0);
@@ -429,6 +436,12 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     }
     if (_page == RBSettingsApplications) button.enabled = !_saving && !_loading;
     [cell.contentView addSubview:button];
+    [NSLayoutConstraint activateConstraints:@[
+        [button.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:8],
+        [button.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-8],
+        [button.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:2],
+        [button.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-2]
+    ]];
     return cell;
 }
 - (void)rowTapped:(UIButton *)sender {

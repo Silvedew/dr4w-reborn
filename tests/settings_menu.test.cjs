@@ -105,3 +105,13 @@ test('search keeps its dimensions while typing and restores content sizing on ex
   assert.match(showPage, /page != RBSettingsApplications[\s\S]*?_searchEditing = NO[\s\S]*?\[_search resignFirstResponder\]/);
   assert.match(methodBody(panel, '- (void)updatePreferredSize'), /RBSettingsPanelTargetWhileEditing/);
 });
+
+test('settings controls follow the final cell bounds when compact pages resize', () => {
+  const cell = methodBody(source('Reborn/RBSettingsPanel.m'), '- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)path');
+  for (const side of ['leading', 'trailing', 'top', 'bottom'])
+    assert.match(cell, new RegExp(`\\[button\\.${side}Anchor constraintEqualToAnchor:cell\\.contentView\\.${side}Anchor`));
+  assert.match(cell, /button\.translatesAutoresizingMaskIntoConstraints = NO/);
+  assert.match(cell, /_scaleSlider\.heightAnchor constraintEqualToConstant:44/);
+  assert.match(cell, /_scaleLabel\.bottomAnchor constraintEqualToAnchor:_scaleSlider\.topAnchor/);
+  assert.doesNotMatch(cell, /button\.autoresizingMask|_scaleSlider\.autoresizingMask|_scaleLabel\.autoresizingMask/);
+});

@@ -14,6 +14,11 @@
 static NSTimer       *gLayoutTimer = nil;
 static RBVolumeSequence gVolumeSequence = {0};
 
+@interface RBManager ()
+- (CGRect)currentHostBounds;
+- (void)sceneDidDeactivate:(UIScene *)scene;
+@end
+
 static BOOL RBMayPresent(void) {
     if (!RBEnabledForBundle([[NSBundle mainBundle] bundleIdentifier])) return NO;
     if (RBIsSpringBoard()) return !RBDeviceIsLocked() && RBHomeIsVisible();
@@ -32,7 +37,7 @@ static void RBStartLayoutPolling(void) {
     if (gLayoutTimer) return;
     __block CGRect lastBounds = CGRectNull;
     gLayoutTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
-        CGRect host = RBHostBounds();
+        CGRect host = [[RBManager shared] currentHostBounds];
         if (CGRectEqualToRect(host, lastBounds)) return;
         lastBounds = host;
         [[RBManager shared] layoutForCurrentHost];
@@ -62,10 +67,6 @@ CGRect RBHostBounds(void) {
     }
     return [UIScreen mainScreen].bounds;
 }
-
-@interface RBManager ()
-- (void)toggle;
-@end
 
 @implementation RBManager {
     RBWindow *_window;
@@ -97,24 +98,43 @@ CGRect RBHostBounds(void) {
 }
 
 - (void)present {
+    [self presentFromFloatingWindow:nil center:CGPointZero];
+}
+
+- (void)presentFromFloatingWindow:(UIWindow *)sourceWindow center:(CGPoint)center {
     if ([self isShowing]) return;
     if (!RBMayPresent()) {
         RBDiagnostic(@"present.skipped", @"policy-or-foreground");
         return;
     }
-    UIWindowScene *scene = [self activeScene];
+    UIWindowScene *scene = sourceWindow ? sourceWindow.windowScene : [self activeScene];
+    if (sourceWindow && scene && (scene.activationState != UISceneActivationStateForegroundActive ||
+        ![UIApplication.sharedApplication.connectedScenes containsObject:scene])) return;
     if (!RBPolicyCanHostWindow(scene != nil, [UIApplication sharedApplication].connectedScenes.count)) {
         RBDiagnostic(@"present.skipped", @"no-active-scene");
         return;
     }
 
-    _previousKey = [UIApplication sharedApplication].keyWindow;
+    _previousKey = nil;
+    if (scene) {
+        for (UIWindow *window in scene.windows) {
+            if (window.isKeyWindow) {
+                _previousKey = window;
+                break;
+            }
+        }
+    } else _previousKey = [UIApplication sharedApplication].keyWindow;
 
-    RBWindow *w = [[RBWindow alloc] initWithFrame:RBHostBounds()];
+    RBWindow *w = [[RBWindow alloc] initWithFrame:scene ? scene.coordinateSpace.bounds : RBHostBounds()];
     if (scene) w.windowScene = scene;
+    else if (sourceWindow) w.screen = sourceWindow.screen;
     w.windowLevel = UIWindowLevelAlert + 1000.0;
     w.backgroundColor = [UIColor clearColor];
-    w.rootViewController = [[RBController alloc] init];
+    w.opaque = NO;
+    RBController *controller = [[RBController alloc] init];
+    if (sourceWindow) [controller setInitialToolbarAnchor:center fromWindow:sourceWindow];
+    w.rootViewController = controller;
+    [w layoutIfNeeded];
     w.hidden = NO;
     [w makeKeyAndVisible];
     _window = w;
@@ -132,6 +152,11 @@ CGRect RBHostBounds(void) {
     });
 }
 
+- (void)dismissFromUser {
+    [(RBController *)_window.rootViewController syncFloatingPositionAfterUserClose];
+    [self dismiss];
+}
+
 - (void)dismiss {
     if (!_window) return;
 
@@ -145,7 +170,8 @@ CGRect RBHostBounds(void) {
 
     BOOL canRestoreKey = RBIsSpringBoard() ? !RBDeviceIsLocked() :
         [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
-    if (_previousKey && !_previousKey.hidden && canRestoreKey)
+    if (_previousKey && !_previousKey.hidden && canRestoreKey &&
+        (!_previousKey.windowScene || _previousKey.windowScene.activationState == UISceneActivationStateForegroundActive))
         [_previousKey makeKeyWindow];
     _previousKey = nil;
 
@@ -154,12 +180,20 @@ CGRect RBHostBounds(void) {
 }
 
 - (void)toggle {
-    if ([self isShowing]) [self dismiss];
+    if ([self isShowing]) [self dismissFromUser];
     else [self present];
 }
 
+- (CGRect)currentHostBounds {
+    return _window.windowScene ? _window.windowScene.coordinateSpace.bounds : RBHostBounds();
+}
+
+- (void)sceneDidDeactivate:(UIScene *)scene {
+    if (_window.windowScene == scene) [self dismiss];
+}
+
 - (void)layoutForCurrentHost {
-    if (_window) _window.frame = RBHostBounds();
+    if (_window) _window.frame = [self currentHostBounds];
     [[RBFloating shared] applyPrefs];
 }
 
@@ -254,6 +288,7 @@ static void RBBootstrap(void) {
             [nc addObserverForName:name object:nil queue:[NSOperationQueue mainQueue]
                         usingBlock:^(NSNotification *note) {
                 [[RBFloating shared] sceneDidDeactivate:note.object];
+                [[RBManager shared] sceneDidDeactivate:note.object];
             }];
         }
         [nc addObserverForName:UIApplicationDidEnterBackgroundNotification

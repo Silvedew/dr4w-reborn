@@ -37,6 +37,9 @@
     CGFloat _toolbarScale;
     BOOL _previewingToolbarScale;
     CGPoint _dragOrigin;
+    BOOL _toolbarWasMoved;
+    UIWindow *_initialToolbarAnchorWindow;
+    CGPoint _initialToolbarAnchor;
 
     UIButton       *_brush;
     UIButton       *_gear;
@@ -59,6 +62,7 @@
     _toolbarPosition = RBToolbarPositionForApp(NSBundle.mainBundle.bundleIdentifier);
     _toolbarScale = [RBPrefs toolbarScale];
     self.view.backgroundColor = [UIColor clearColor];
+    self.view.opaque = NO;
 
     _drawView = [[ACEDrawingView alloc] initWithFrame:self.view.bounds];
     _drawView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -80,6 +84,13 @@
 }
 
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    // Keep the source anchor through the window's first safe-area layouts.
+    [self.view layoutIfNeeded];
+    _initialToolbarAnchorWindow = nil;
+}
 
 #pragma mark - toolbar
 
@@ -118,7 +129,7 @@
     [_bar addSubview:_barScroll];
     _brush = [self barButton:@RB_PENCIL_SYMBOL label:@"画笔设置" action:@selector(showBrushFromButton:)];
     _brush.accessibilityValue = [NSString stringWithFormat:@"粗细 %.0f 磅", [RBPrefs lineWidth]];
-    _gear  = [self barButton:@RB_SETTINGS_SYMBOL label:@"绘图设置" action:@selector(settingsTapped:)];
+    _gear  = [self barButton:@RB_SETTINGS_SYMBOL label:@"设置" action:@selector(settingsTapped:)];
     _gear.accessibilityHint = @"单指拖动工具栏，双指滚动按钮；辅助操作可移动工具栏";
     _gear.accessibilityCustomActions = @[
         [[UIAccessibilityCustomAction alloc] initWithName:@"向上移动工具栏" target:self selector:@selector(moveToolbarUp:)],
@@ -137,6 +148,16 @@
     [super viewDidLayoutSubviews];
     UIEdgeInsets insets = self.view.safeAreaInsets;
     RBToolbarMetrics metrics = RBToolbarMetricsForScale(_toolbarScale);
+    if (_initialToolbarAnchorWindow && self.view.window) {
+        CGPoint anchor = [self.view convertPoint:_initialToolbarAnchor fromCoordinateSpace:_initialToolbarAnchorWindow];
+        CGSize size = self.view.bounds.size;
+        RBToolbarLayout minimum = RBLayoutToolbar(size.width, size.height,
+            insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){0, 0}, _toolbarScale);
+        RBToolbarLayout maximum = RBLayoutToolbar(size.width, size.height,
+            insets.top, insets.left, insets.bottom, insets.right, (RBToolbarPosition){1, 1}, _toolbarScale);
+        _toolbarPosition = RBToolbarPositionForTopAnchor(minimum, maximum,
+            (RBToolbarPoint){anchor.x, anchor.y}, _toolbarPosition, _toolbarScale);
+    }
     RBToolbarLayout layout = RBLayoutToolbar(self.view.bounds.size.width, self.view.bounds.size.height,
         insets.top, insets.left, insets.bottom, insets.right, _toolbarPosition, _toolbarScale);
     _bar.frame = CGRectMake(layout.x, layout.y, layout.width, layout.height);
@@ -158,6 +179,22 @@
     }
     [self layoutBrushPanel];
     [self layoutSettingsPanel];
+}
+
+- (void)setInitialToolbarAnchor:(CGPoint)anchor fromWindow:(UIWindow *)sourceWindow {
+    if (!isfinite(anchor.x) || !isfinite(anchor.y)) return;
+    _initialToolbarAnchor = anchor;
+    _initialToolbarAnchorWindow = sourceWindow;
+}
+
+- (void)syncFloatingPositionAfterUserClose {
+    if (!_toolbarWasMoved || !self.view.window) return;
+    [self.view layoutIfNeeded];
+    CGRect frame = _bar.frame;
+    RBToolbarPoint anchor = RBToolbarTopAnchor((RBToolbarLayout){frame.origin.x, frame.origin.y,
+        frame.size.width, frame.size.height}, _toolbarScale);
+    CGPoint point = [self.view convertPoint:CGPointMake(anchor.x, anchor.y) toView:self.view.window];
+    [[RBFloating shared] updatePosition:point fromWindow:self.view.window];
 }
 
 - (void)previewToolbarScale:(CGFloat)scale {
@@ -210,7 +247,14 @@
         CGPoint translation = [gesture translationInView:self.view];
         [self placeToolbarAt:CGPointMake(_dragOrigin.x + translation.x, _dragOrigin.y + translation.y)];
     }
-    if (gesture.state == UIGestureRecognizerStateEnded) [self saveToolbarPosition];
+    if (gesture.state == UIGestureRecognizerStateEnded) [self finishToolbarMoveFrom:_dragOrigin];
+}
+
+- (void)finishToolbarMoveFrom:(CGPoint)origin {
+    CGPoint current = _bar.frame.origin;
+    if (!RBToolbarPointsDiffer((RBToolbarPoint){origin.x, origin.y}, (RBToolbarPoint){current.x, current.y})) return;
+    _toolbarWasMoved = YES;
+    [self saveToolbarPosition];
 }
 
 - (void)saveToolbarPosition {
@@ -224,16 +268,23 @@
 }
 
 - (BOOL)moveToolbarUp:(UIAccessibilityCustomAction *)action {
-[self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y - 44)]; [self saveToolbarPosition]; return YES;
+    return [self moveToolbarBy:CGPointMake(0, -44)];
 }
 - (BOOL)moveToolbarDown:(UIAccessibilityCustomAction *)action {
-[self placeToolbarAt:CGPointMake(_bar.frame.origin.x, _bar.frame.origin.y + 44)]; [self saveToolbarPosition]; return YES;
+    return [self moveToolbarBy:CGPointMake(0, 44)];
 }
 - (BOOL)moveToolbarLeft:(UIAccessibilityCustomAction *)action {
-[self placeToolbarAt:CGPointMake(_bar.frame.origin.x - 44, _bar.frame.origin.y)]; [self saveToolbarPosition]; return YES;
+    return [self moveToolbarBy:CGPointMake(-44, 0)];
 }
 - (BOOL)moveToolbarRight:(UIAccessibilityCustomAction *)action {
-[self placeToolbarAt:CGPointMake(_bar.frame.origin.x + 44, _bar.frame.origin.y)]; [self saveToolbarPosition]; return YES;
+    return [self moveToolbarBy:CGPointMake(44, 0)];
+}
+
+- (BOOL)moveToolbarBy:(CGPoint)translation {
+    CGPoint origin = _bar.frame.origin;
+    [self placeToolbarAt:CGPointMake(origin.x + translation.x, origin.y + translation.y)];
+    [self finishToolbarMoveFrom:origin];
+    return YES;
 }
 
 
@@ -248,7 +299,7 @@
 }
 
 - (void)closeTapped:(UIButton *)sender {
-    [[RBManager shared] dismiss];
+    [[RBManager shared] dismissFromUser];
 }
 
 
@@ -261,16 +312,6 @@
     _settingsPanel.toolbarScale = _toolbarScale;
     __weak typeof(self) weakSelf = self;
     _settingsPanel.closeHandler = ^{ [weakSelf closeSettingsPanel]; };
-    _settingsPanel.brushHandler = ^{
-        RBController *controller = weakSelf;
-        if (!controller) return;
-        [controller closeSettingsPanel];
-        [controller showBrushFromButton:controller->_gear];
-    };
-    _settingsPanel.clearHandler = ^{
-        RBController *controller = weakSelf;
-        if (controller) [controller->_drawView clear];
-    };
     _settingsPanel.hideBallHandler = ^{ [[RBFloating shared] hideTemporarily]; };
     _settingsPanel.toolChange = ^(ACEDrawingToolType tool) {
         RBController *controller = weakSelf;

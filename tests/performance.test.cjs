@@ -183,7 +183,9 @@ test('native chrome adapts its material and press feedback to accessibility sett
   assert.match(controller, /_barScroll.delaysContentTouches = NO/);
   assert.match(controller, /b.accessibilityLabel = label/);
   assert.doesNotMatch(controller, /SystemThinMaterialLight|colorWithWhite:0\.10/);
-  assert.match(source('Reborn/RBFloating.m'), /initWithFrame:_win.bounds usesMaterial:NO/);
+  const floating = source('Reborn/RBFloating.m');
+  assert.match(floating, /\[\[RBChromeSurface alloc\] initWithFrame:_win.bounds(?: usesMaterial:YES)?\]/);
+  assert.match(floating, /_ball.opaque = NO/);
 });
 
 test('whole toolbar drags with one finger, scrolls with two and saves per-app position on release', () => {
@@ -195,7 +197,7 @@ test('whole toolbar drags with one finger, scrolls with two and saves per-app po
   assert.match(controller, /_barScroll.panGestureRecognizer.minimumNumberOfTouches = 2/);
   assert.match(controller, /touchesShouldCancelInContentView:[\s\S]*?return YES/);
   assert.match(controller, /_toolbarPosition = RBToolbarPositionForApp\(NSBundle.mainBundle.bundleIdentifier\)/);
-  assert.match(controller, /if \(gesture.state == UIGestureRecognizerStateEnded\) \[self saveToolbarPosition\]/);
+  assert.match(controller, /if \(gesture.state == UIGestureRecognizerStateEnded\) \[self finishToolbarMoveFrom:_dragOrigin\]/);
   assert.match(controller, /gesture translationInView:self.view/);
   assert.match(controller, /RBToolbarPositionForOrigin/);
   assert.match(controller, /_barScroll.frame = CGRectMake\(0, metrics.padding/);
@@ -363,4 +365,48 @@ test('App management uses a single-app acknowledged operation and shared search'
   for (const ui of [preferences, panel]) assert.match(ui, /RBFilterApplications/);
   assert.match(source('Shared/RBAppCatalog.m'), /localizedCaseInsensitiveContainsString/);
   assert.match(source('.github/workflows/build.yml'), /Shared\/RBSettingsStore.m Shared\/RBAppCatalog.m/);
+});
+
+test('ball opening uses its actual center and source scene before the toolbar becomes visible', () => {
+  const floating = source('Reborn/RBFloating.m');
+  const tap = floating.slice(floating.indexOf('- (void)tapped {'), floating.indexOf('- (void)longPressed:'));
+  assert.match(tap, /\[_ball convertPoint:[\s\S]*?toView:_win\]/);
+  assert.match(tap, /presentFromFloatingWindow:_win center:center/);
+  assert.doesNotMatch(tap, /\[\[RBManager shared\] toggle\]/);
+  const manager = source('Reborn/RBManager.m');
+  assert.match(manager, /sourceWindow \? sourceWindow.windowScene : \[self activeScene\]/);
+  assert.ok(manager.indexOf('[controller setInitialToolbarAnchor:center fromWindow:sourceWindow]') < manager.indexOf('w.hidden = NO'));
+  assert.match(manager, /_window.windowScene \? _window.windowScene.coordinateSpace.bounds : RBHostBounds\(\)/);
+  const controller = source('Reborn/RBController.m');
+  assert.match(controller, /convertPoint:_initialToolbarAnchor fromCoordinateSpace:_initialToolbarAnchorWindow/);
+  assert.match(controller, /RBToolbarPositionForTopAnchor/);
+  const initialAnchor = controller.slice(controller.indexOf('- (void)setInitialToolbarAnchor:'), controller.indexOf('- (void)syncFloatingPositionAfterUserClose'));
+  assert.doesNotMatch(initialAnchor, /saveToolbarPosition|RBSaveToolbarPosition|RBWriteSetting/);
+});
+
+test('only a completed manual toolbar move and user close can update the ball position', () => {
+  const manager = source('Reborn/RBManager.m');
+  const userClose = manager.slice(manager.indexOf('- (void)dismissFromUser {'), manager.indexOf('- (void)dismiss {'));
+  assert.match(userClose, /syncFloatingPositionAfterUserClose[\s\S]*?\[self dismiss\]/);
+  const automaticClose = manager.slice(manager.indexOf('- (void)dismiss {'), manager.indexOf('- (void)toggle {'));
+  assert.doesNotMatch(automaticClose, /syncFloatingPositionAfterUserClose|updatePosition:/);
+  assert.match(manager, /sceneDidDeactivate:[\s\S]*?if \(_window.windowScene == scene\) \[self dismiss\]/);
+  assert.match(manager, /\[\[RBManager shared\] sceneDidDeactivate:note.object\]/);
+  assert.match(automaticClose, /_previousKey.windowScene.activationState == UISceneActivationStateForegroundActive/);
+  assert.match(manager, /if \(\[self isShowing\]\) \[self dismissFromUser\];\s*else \[self present\]/);
+  const controller = source('Reborn/RBController.m');
+  assert.match(controller, /closeTapped:[\s\S]*?\[\[RBManager shared\] dismissFromUser\]/);
+  const movement = controller.slice(controller.indexOf('- (void)finishToolbarMoveFrom:'), controller.indexOf('- (void)saveToolbarPosition'));
+  assert.match(movement, /if \(!RBToolbarPointsDiffer[\s\S]*?return;[\s\S]*?_toolbarWasMoved = YES/);
+  const sync = controller.slice(controller.indexOf('- (void)syncFloatingPositionAfterUserClose'), controller.indexOf('- (void)previewToolbarScale:'));
+  assert.match(sync, /if \(!_toolbarWasMoved \|\| !self.view.window\) return/);
+  assert.match(sync, /RBToolbarTopAnchor[\s\S]*?convertPoint:[\s\S]*?updatePosition:point fromWindow:self.view.window/);
+  assert.doesNotMatch(sync, /contentOffset|_close.center/);
+  const floating = source('Reborn/RBFloating.m');
+  const updateStart = floating.indexOf('- (void)updatePosition:');
+  const update = floating.slice(updateStart, floating.indexOf('- (CGRect)clamped:', updateStart));
+  assert.match(update, /convertPoint:point fromCoordinateSpace:sourceWindow/);
+  assert.match(update, /RBClampFloatingCenter/);
+  assert.match(update, /\[RBPrefs setFloatCenter:_center\]/);
+  assert.doesNotMatch(update, /\[self show\]|refreshVisibility|hidden = NO/);
 });

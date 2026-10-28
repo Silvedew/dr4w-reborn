@@ -85,15 +85,23 @@ disables all apps. Logs `settings.service`, `settings.transport`, and
 
 The vertical toolbar moves with a one-finger drag anywhere on the bar, including its buttons, and stays inside the current app's
 safe area. Each app retains its own relative position across closing, app restarts,
-respring, rotation and Split View resizing. Apps without a saved position start
-at the right-hand center. Its scrollable actions run from Close through Clear,
+respring, rotation and Split View resizing. The volume shortcut restores this
+saved position, defaulting to the right-hand center. Tapping the floating ball
+instead aligns the toolbar's top Close button with the ball's center, clamped to
+the app's safe area. After manually moving the toolbar, closing with Close or the
+volume shortcut moves the ball to that top-button anchor. Automatic dismissal
+and initial edge avoidance leave the ball's position unchanged.
+Its scrollable actions run from Close through Clear,
 Pencil, Undo and Settings; use two fingers to scroll the actions in short windows.
 Dragging cancels button taps. VoiceOver users can move the bar through the Settings
 button's four directional custom actions. Settings includes a live 60–150% global
 toolbar-size slider; compact sizes preserve 44-point button targets.
 
-The Settings menu and its tool, ball, size and App pages use the same translucent
-rounded material as the brush panel. App management is searchable by name or bundle
+The circular floating ball, toolbar and Settings pages use the same translucent
+material and accessibility fallbacks. Settings contains tools, ball size/opacity,
+toolbar size, App management and temporary ball hiding where applicable. Pencil
+and Clear remain on the toolbar rather than being repeated in Settings.
+App management is searchable by name or bundle
 identifier both here and in system Settings. Changes merge one App at a time through
 SpringBoard and report save failures. Disabling the current drawing App requires
 confirmation because it closes the canvas and floating ball. App directory loading

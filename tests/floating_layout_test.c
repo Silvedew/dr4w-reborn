@@ -1,4 +1,5 @@
 #include "RBFloatingLayout.h"
+#include "RBToolbarLayout.h"
 #include <assert.h>
 #include <stdio.h>
 
@@ -15,6 +16,25 @@ int main(void) {
             assert(high.x + s == x + w - 8 && high.y + s == y + h - 8);
             RBFloatingOrigin middle = RBClampFloatingOrigin(x + 60, y + 40, x, y, w, h, s);
             assert(middle.x == x + 60 && middle.y == y + 40);
+            RBFloatingOrigin center = RBClampFloatingCenter(middle.x + s / 2, middle.y + s / 2, x, y, w, h, s);
+            assert(center.x == middle.x + s / 2 && center.y == middle.y + s / 2);
+            RBFloatingOrigin centerLow = RBClampFloatingCenter(-1000, -1000, x, y, w, h, s);
+            RBFloatingOrigin centerHigh = RBClampFloatingCenter(9000, 9000, x, y, w, h, s);
+            assert(centerLow.x == x + 8 + s / 2 && centerLow.y == y + 8 + s / 2);
+            assert(centerHigh.x == x + w - 8 - s / 2 && centerHigh.y == y + h - 8 - s / 2);
+            const double scales[] = {0.6, 1, 1.5};
+            for (unsigned k = 0; k < sizeof(scales) / sizeof(scales[0]); k++) {
+                RBToolbarLayout minimum = RBLayoutToolbar(w, h, 24, 0, 20, 0, (RBToolbarPosition){0,0}, scales[k]);
+                RBToolbarLayout maximum = RBLayoutToolbar(w, h, 24, 0, 20, 0, (RBToolbarPosition){1,1}, scales[k]);
+                RBToolbarLayout bar = RBLayoutToolbar(w, h, 24, 0, 20, 0, (RBToolbarPosition){0.5,0.5}, scales[k]);
+                RBToolbarPoint anchor = RBToolbarTopAnchor(bar, scales[k]);
+                // A scene host may have a nonzero origin; closing stores its center in host axes.
+                RBFloatingOrigin followed = RBClampFloatingCenter(anchor.x + x, anchor.y + y, x, y, w, h, s);
+                RBToolbarPosition reopened = RBToolbarPositionForTopAnchor(minimum, maximum,
+                    (RBToolbarPoint){followed.x - x, followed.y - y}, (RBToolbarPosition){0.5,0.5}, scales[k]);
+                RBToolbarLayout restored = RBLayoutToolbar(w, h, 24, 0, 20, 0, reopened, scales[k]);
+                assert(fabs(restored.x - bar.x) < 0.001 && fabs(restored.y - bar.y) < 0.001);
+            }
             // An origin saved before rotation/resizing must clamp inside the new host.
             RBFloatingOrigin resized = RBClampFloatingOrigin(1280, 900, x, y, w, h, s);
             assert(resized.x >= x + 8 && resized.x + s <= x + w - 8);
@@ -23,6 +43,6 @@ int main(void) {
     }
     RBFloatingOrigin tiny = RBClampFloatingOrigin(90, 90, 0, 0, 50, 40, 80);
     assert(tiny.x == 8 && tiny.y == 8);
-    puts("Floating-ball bounds across rotation, resizing, edge positions and ball sizes passed.");
+    puts("Floating-ball bounds, toolbar-anchor follow/reopen, nonzero hosts and center clamps passed.");
     return 0;
 }

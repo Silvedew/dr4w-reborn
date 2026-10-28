@@ -35,6 +35,19 @@ int main(void) {
             assert(layout.height - 2 * metrics.padding >= metrics.button);
             RBToolbarLayout minimum = RBLayoutToolbar(w, h, 24, 10, 20, 15, (RBToolbarPosition){0,0}, scale);
             RBToolbarLayout maximum = RBLayoutToolbar(w, h, 24, 10, 20, 15, (RBToolbarPosition){1,1}, scale);
+            RBToolbarPoint lowAnchor = RBToolbarTopAnchor(minimum, scale);
+            RBToolbarPoint highAnchor = RBToolbarTopAnchor(maximum, scale);
+            const double targetsX[] = {-1000, (lowAnchor.x + highAnchor.x) / 2, 9000};
+            const double targetsY[] = {-1000, (lowAnchor.y + highAnchor.y) / 2, 9000};
+            for (unsigned x = 0; x < 3; x++) for (unsigned y = 0; y < 3; y++) {
+                RBToolbarPosition anchored = RBToolbarPositionForTopAnchor(minimum, maximum,
+                    (RBToolbarPoint){targetsX[x], targetsY[y]}, (RBToolbarPosition){0.3,0.7}, scale);
+                RBToolbarLayout placed = RBLayoutToolbar(w, h, 24, 10, 20, 15, anchored, scale);
+                RBToolbarPoint actual = RBToolbarTopAnchor(placed, scale);
+                closeTo(actual.x, fmax(lowAnchor.x, fmin(targetsX[x], highAnchor.x)));
+                closeTo(actual.y, fmax(lowAnchor.y, fmin(targetsY[y], highAnchor.y)));
+                if (maximum.y == minimum.y) assert(anchored.y == 0.7);
+            }
             RBToolbarPosition edge = RBToolbarPositionForOrigin(minimum, maximum, -1000, 9000, (RBToolbarPosition){0.3,0.7});
             assert(edge.x == 0);
             if (maximum.y > minimum.y) assert(edge.y == 1);
@@ -50,6 +63,21 @@ int main(void) {
         RBToolbarLayout restored = RBLayoutToolbar(1024, 1366, 24, 0, 20, 0, moved, scale);
         closeTo(restored.x, 200);
         closeTo(restored.y, 300);
+        RBToolbarPoint anchor = RBToolbarTopAnchor(restored, scale);
+        closeTo(anchor.x, restored.x + restored.width / 2);
+        closeTo(anchor.y, restored.y + metrics.padding + metrics.button / 2);
+        RBToolbarPosition roundTrip = RBToolbarPositionForTopAnchor(minimum, maximum, anchor,
+            RBToolbarDefaultPosition(), scale);
+        closeTo(roundTrip.x, moved.x);
+        closeTo(roundTrip.y, moved.y);
+        // At an edge, a clamped accessibility move must not count as a user move.
+        RBToolbarPosition blocked = RBToolbarPositionForOrigin(minimum, maximum,
+            maximum.x + 44, maximum.y + 44, (RBToolbarPosition){1,1});
+        RBToolbarLayout unchanged = RBLayoutToolbar(1024, 1366, 24, 0, 20, 0, blocked, scale);
+        assert(!RBToolbarPointsDiffer((RBToolbarPoint){maximum.x, maximum.y},
+            (RBToolbarPoint){unchanged.x, unchanged.y}));
+        assert(RBToolbarPointsDiffer((RBToolbarPoint){minimum.x, minimum.y},
+            (RBToolbarPoint){restored.x, restored.y}));
         RBToolbarLayout resized = RBLayoutToolbar(320, 768, 24, 0, 20, 0, moved, scale);
         closeTo((resized.x - metrics.margin) / (320 - 2 * metrics.margin - metrics.thickness), moved.x);
         RBToolbarLayout tiny = RBLayoutToolbar(200, 180, 24, 0, 20, 0, moved, scale);
@@ -59,6 +87,7 @@ int main(void) {
     assert(standard.thickness == RBToolbarThickness && standard.length == RBToolbarLength);
     assert(RBToolbarDefaultPosition().x == 1 && RBToolbarDefaultPosition().y == 0.5);
     assert(RBToolbarButton >= 44 && RBToolbarCount == 5);
-    puts("Toolbar scale, minimum targets, safe bounds, relative resizing and overflow passed.");
+    assert(!RBToolbarPointsDiffer((RBToolbarPoint){10,20}, (RBToolbarPoint){10.00001,20}));
+    puts("Toolbar scale, top-anchor alignment and round trips, edge moves, safe bounds and overflow passed.");
     return 0;
 }

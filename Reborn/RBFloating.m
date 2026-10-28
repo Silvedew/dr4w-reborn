@@ -17,6 +17,7 @@
 - (CGFloat)size;
 - (UIImage *)icon;
 - (BOOL)disabledHere;
+- (void)buildForScene:(UIWindowScene *)scene;
 @end
 
 @interface RBFloatingController : UIViewController
@@ -72,7 +73,10 @@
 }
 
 - (void)buildIfNeeded {
-    UIWindowScene *scene = [self activeScene];
+    [self buildForScene:[self activeScene]];
+}
+
+- (void)buildForScene:(UIWindowScene *)scene {
     if (!RBPolicyCanHostWindow(scene != nil, [UIApplication sharedApplication].connectedScenes.count)) {
         RBDiagnostic(@"ball.skipped", @"no-active-scene");
         return;
@@ -100,7 +104,8 @@
     vc.view.clipsToBounds = YES;
     _win.rootViewController = vc;
 
-    _ball = [[RBChromeSurface alloc] initWithFrame:_win.bounds usesMaterial:NO];
+    _ball = [[RBChromeSurface alloc] initWithFrame:_win.bounds];
+    _ball.opaque = NO;
     _ball.layer.cornerRadius = size / 2.0;
     _ball.layer.cornerCurve = kCACornerCurveContinuous;
     _ball.clipsToBounds = YES;
@@ -194,6 +199,25 @@
     else [self show];
 }
 
+- (void)updatePosition:(CGPoint)point fromWindow:(UIWindow *)sourceWindow {
+    if (!sourceWindow || RBIsSpringBoard() || !isfinite(point.x) || !isfinite(point.y)) return;
+    UIWindowScene *scene = sourceWindow.windowScene;
+    if (scene && (scene.activationState != UISceneActivationStateForegroundActive ||
+        ![UIApplication.sharedApplication.connectedScenes containsObject:scene])) return;
+    [self buildForScene:scene];
+    if (!_win || _win.windowScene != scene) return;
+    id<UICoordinateSpace> hostSpace = [self hostSpace];
+    CGPoint center = [hostSpace convertPoint:point fromCoordinateSpace:sourceWindow];
+    if (!isfinite(center.x) || !isfinite(center.y)) return;
+    CGRect host = hostSpace.bounds;
+    RBFloatingOrigin clamped = RBClampFloatingCenter(center.x, center.y,
+        host.origin.x, host.origin.y, host.size.width, host.size.height, [self size]);
+    _center = CGPointMake(clamped.x, clamped.y);
+    _snapped = NO;
+    [RBPrefs setFloatCenter:_center];
+    [self applyPrefs];
+}
+
 - (CGRect)clamped:(CGRect)f {
     CGRect host = [self hostSpace].bounds;
     RBFloatingOrigin origin = RBClampFloatingOrigin(f.origin.x, f.origin.y,
@@ -261,7 +285,9 @@
 - (void)tapped {
     if (_userHidden) return;
     [self touchedDown];
-    [[RBManager shared] toggle];
+    CGPoint center = [_ball convertPoint:CGPointMake(CGRectGetMidX(_ball.bounds), CGRectGetMidY(_ball.bounds))
+        toView:_win];
+    [[RBManager shared] presentFromFloatingWindow:_win center:center];
 }
 
 - (void)longPressed:(UILongPressGestureRecognizer *)g {

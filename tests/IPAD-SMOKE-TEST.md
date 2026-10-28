@@ -57,7 +57,7 @@ they do not establish real App Store sandbox/IPC behavior.
 
 13. In light and dark appearances, verify the toolbar and monochrome pencil ball remain
     legible over a busy app. Enable Reduce Transparency and Increase Contrast:
-    toolbar material becomes solid and its boundary remains clear. Enable Reduce
+    ball and toolbar material become solid and their boundaries remain clear. Enable Reduce
     Motion: button feedback must not scale. Verify VoiceOver announces each action.
 14. Drag from the toolbar's background and each of its five buttons using one finger;
     there must be no separate drag handle. Verify buttons do not trigger
@@ -65,8 +65,8 @@ they do not establish real App Store sandbox/IPC behavior.
     gestures continue drawing. Resize Split View and rotate: the toolbar keeps
     its relative position within safe areas and always remains vertical. In short
     windows, use two fingers to scroll to all five controls without moving the toolbar.
-    Close/reopen the panel, quit/reopen the app, and respring: the app's own
-    position is restored. Move a second app's toolbar elsewhere and verify the
+    Close and reopen with the volume shortcut, quit/reopen the app, and respring:
+    the app's own saved position is restored. Move a second app's toolbar elsewhere and verify the
     positions remain independent. No reset-position menu should appear.
     Verify the Settings button's four directional VoiceOver actions. Confirm ball dragging,
     temporary hiding and idle fade timing still behave as before.
@@ -125,6 +125,9 @@ they do not establish real App Store sandbox/IPC behavior.
     Adjust toolbar size to 60%, 100% and 150%: preview is immediate, targets stay
     at least 44 points, and release/close preserves the size in another App,
     on the home screen and after restarting. Brush panel size stays unchanged.
+    The menu title and back/close accessibility labels use “设置”; it has no
+    “画笔设置” or “一键清屏” rows. Use the toolbar's Pencil and Clear buttons to
+    verify those operations still work. App-disable confirmation remains distinct.
 19. In toolbar App management, search names and bundle IDs, scroll, enable a
     different App and check system Settings reflects the change. With the
     keyboard open, rotate and resize Split View: search and results stay inside
@@ -132,6 +135,25 @@ they do not establish real App Store sandbox/IPC behavior.
     confirm closes drawing and the ball. Failed saves and directory loads show
     retry feedback, preserve other Apps, and do not freeze the UI. After searching
     or canceling confirmation, retry must never change the wrong App.
+
+20. Place the ball in the center, at each edge and in every corner. Tap it at
+    toolbar scales 60%, 100% and 150%: the top Close button must align with its
+    center wherever the full toolbar fits, otherwise remain within the safe area.
+    Check rotation, left/right Split View, multiple active scenes and legacy apps.
+    Opening must not briefly flash the saved/default toolbar position. Merely
+    opening and closing a clamped toolbar must leave the ball unmoved.
+21. Move the toolbar by dragging and then by VoiceOver actions. Close once with
+    Close and once with the volume shortcut: the ball follows the standard top
+    button anchor, bounded inside the host. Repeat after scrolling the toolbar
+    in a short window; scrolling alone must not move the return anchor. Tap the
+    returned ball and check alignment again. After moving the toolbar, also try
+    locking, switching apps and disabling the current App: these automatic
+    closures must not update the ball position or restore a hidden/disabled ball.
+    Volume opening still restores the saved toolbar position, and the home
+    screen continues to work without a floating ball.
+    With two scenes of the same App active, deactivate or close the drawing scene:
+    its drawing window must close without moving the ball or blocking the other
+    scene's ball, and must not restore keyboard focus to the inactive scene.
 
 The supplied crash matches the build-29 (0.1.29) release's arm64e UUID
 3554E8B2-0687-32FE-B792-A40E1D2B52B4. In that binary,

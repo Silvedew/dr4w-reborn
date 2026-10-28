@@ -95,11 +95,11 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     [self.view addSubview:_content];
     _back = [self buttonWithTitle:@"" action:@selector(goBack:)];
     [_back setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
-    _back.accessibilityLabel = _back.largeContentTitle = @"返回绘图设置";
+    _back.accessibilityLabel = _back.largeContentTitle = @"返回设置";
     [_content addSubview:_back];
     _close = [self buttonWithTitle:@"" action:@selector(close:)];
     [_close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
-    _close.accessibilityLabel = _close.largeContentTitle = @"关闭绘图设置";
+    _close.accessibilityLabel = _close.largeContentTitle = @"关闭设置";
     [_content addSubview:_close];
     _title = [UILabel new];
     _title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
@@ -167,7 +167,7 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     _page = page;
     _back.hidden = page == RBSettingsMain;
     _search.hidden = page != RBSettingsApplications;
-    NSArray *titles = @[@"绘图设置", @"绘图工具", @"悬浮球大小", @"悬浮球透明度", @"竖栏大小", @"App 管理", @"停用当前 App"];
+    NSArray *titles = @[@"设置", @"绘图工具", @"悬浮球大小", @"悬浮球透明度", @"竖栏大小", @"App 管理", @"停用当前 App"];
     _title.text = titles[page];
     [_table reloadData];
     [_table setContentOffset:CGPointZero animated:NO];
@@ -196,10 +196,9 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
         @(ACEDrawingToolTypeTriangleStroke), @(ACEDrawingToolTypePentagonStroke), @(ACEDrawingToolTypeHexagoneStroke)];
 }
 - (NSArray<NSString *> *)mainTitles {
-    NSMutableArray *titles = [@[[NSString stringWithFormat:@"工具：%@", [RBPrefs toolName]], @"画笔设置",
+    NSMutableArray *titles = [@[[NSString stringWithFormat:@"工具：%@", [RBPrefs toolName]],
         @"悬浮球大小", @"悬浮球透明度", @"竖栏大小", @"App 管理"] mutableCopy];
     if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) [titles addObject:@"本次使用隐藏圆球"];
-    [titles addObject:@"一键清屏"];
     return titles;
 }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -324,8 +323,8 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     button.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);
     button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     button.accessibilityTraits = UIAccessibilityTraitButton | (selected ? UIAccessibilityTraitSelected : 0);
-    if ((_page == RBSettingsMain && path.row == (NSInteger)self.mainTitles.count - 1) ||
-        (_page == RBSettingsDisableConfirmation && path.row == 2)) [button setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
+    if (_page == RBSettingsDisableConfirmation && path.row == 2)
+        [button setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
     if (_page == RBSettingsDisableConfirmation && path.row == 0) {
         button.enabled = NO;
         button.accessibilityTraits = UIAccessibilityTraitStaticText;
@@ -339,14 +338,12 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     if (_page == RBSettingsMain) {
         switch (row) {
             case 0: [self showPage:RBSettingsTools]; return;
-            case 1: [self commitPendingChanges]; if (self.brushHandler) self.brushHandler(); return;
-            case 2: [self showPage:RBSettingsBallSize]; return;
-            case 3: [self showPage:RBSettingsBallAlpha]; return;
-            case 4: [self showPage:RBSettingsToolbarSize]; return;
-            case 5: [self showPage:RBSettingsApplications]; return;
+            case 1: [self showPage:RBSettingsBallSize]; return;
+            case 2: [self showPage:RBSettingsBallAlpha]; return;
+            case 3: [self showPage:RBSettingsToolbarSize]; return;
+            case 4: [self showPage:RBSettingsApplications]; return;
             default:
-                if (row == (NSInteger)self.mainTitles.count - 1) { if (self.clearHandler) self.clearHandler(); }
-                else if (self.hideBallHandler) self.hideBallHandler();
+                if (self.hideBallHandler) self.hideBallHandler();
                 [self close:nil]; return;
         }
     } else if (_page == RBSettingsTools) {

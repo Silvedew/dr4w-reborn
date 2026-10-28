@@ -25,6 +25,7 @@ static inline RBToolbarMetrics RBToolbarMetricsForScale(double value) {
 }
 
 typedef struct { double x, y; } RBToolbarPosition;
+typedef struct { double x, y; } RBToolbarPoint;
 
 static inline RBToolbarPosition RBToolbarDefaultPosition(void) { return (RBToolbarPosition){1, 0.5}; }
 static inline double RBToolbarUnit(double value) { return fmax(0, fmin(1, value)); }
@@ -52,4 +53,20 @@ static inline RBToolbarPosition RBToolbarPositionForOrigin(RBToolbarLayout minim
     if (maximum.x > minimum.x) previous.x = RBToolbarUnit((x - minimum.x) / (maximum.x - minimum.x));
     if (maximum.y > minimum.y) previous.y = RBToolbarUnit((y - minimum.y) / (maximum.y - minimum.y));
     return previous;
+}
+
+// The first button's standard center, independent of the scroll view's offset.
+static inline RBToolbarPoint RBToolbarTopAnchor(RBToolbarLayout layout, double scale) {
+    RBToolbarMetrics metrics = RBToolbarMetricsForScale(scale);
+    return (RBToolbarPoint){layout.x + layout.width / 2, layout.y + metrics.padding + metrics.button / 2};
+}
+
+static inline RBToolbarPosition RBToolbarPositionForTopAnchor(RBToolbarLayout minimum,
+    RBToolbarLayout maximum, RBToolbarPoint anchor, RBToolbarPosition previous, double scale) {
+    RBToolbarPoint offset = RBToolbarTopAnchor((RBToolbarLayout){0, 0, minimum.width, minimum.height}, scale);
+    return RBToolbarPositionForOrigin(minimum, maximum, anchor.x - offset.x, anchor.y - offset.y, previous);
+}
+
+static inline bool RBToolbarPointsDiffer(RBToolbarPoint first, RBToolbarPoint second) {
+    return fabs(first.x - second.x) > 0.001 || fabs(first.y - second.y) > 0.001;
 }

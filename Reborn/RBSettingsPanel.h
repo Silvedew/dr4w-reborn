@@ -4,8 +4,6 @@
 
 @interface RBSettingsPanel : UIViewController
 @property (nonatomic, copy) void (^closeHandler)(void);
-@property (nonatomic, copy) void (^brushHandler)(void);
-@property (nonatomic, copy) void (^clearHandler)(void);
 @property (nonatomic, copy) void (^hideBallHandler)(void);
 @property (nonatomic, copy) void (^toolChange)(ACEDrawingToolType);
 @property (nonatomic, copy) void (^toolbarScaleChange)(CGFloat);

@@ -10,5 +10,6 @@
 - (void)sceneDidDeactivate:(UIScene *)scene;
 - (void)applyPrefs;          /* size / opacity changed */
 - (void)refreshVisibility;   /* re-evaluate the per-app switch */
+- (void)updatePosition:(CGPoint)point fromWindow:(UIWindow *)sourceWindow;
 
 @end

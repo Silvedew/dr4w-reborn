@@ -12,7 +12,7 @@ typedef enum {
 
 typedef struct {
     uint64_t generation;
-    bool active, sent, accepted, observed;
+    bool active, sent;
 } RBScreenshotSession;
 
 typedef struct { int pid; uint32_t version; } RBScreenshotSender;
@@ -73,18 +73,12 @@ static inline RBScreenshotResult RBScreenshotAcknowledge(RBScreenshotSession *s,
     if (reply == RBScreenshotRejected) return reply;
     if (!s->sent) return RBScreenshotPending;
     if (reply == RBScreenshotUncertain) return reply;
-    if (reply == RBScreenshotAccepted) s->accepted = true;
-    return s->accepted && s->observed ? RBScreenshotSucceeded : RBScreenshotPending;
+    return RBScreenshotPending;
 }
 
 static inline RBScreenshotResult RBScreenshotObserved(RBScreenshotSession *s) {
     if (!s->active || !s->sent) return RBScreenshotPending;
-    s->observed = true;
-    return s->accepted ? RBScreenshotSucceeded : RBScreenshotPending;
-}
-
-static inline RBScreenshotResult RBScreenshotExpired(const RBScreenshotSession *s) {
-    return s->sent ? RBScreenshotUncertain : RBScreenshotRejected;
+    return RBScreenshotSucceeded;
 }
 
 // Callers obtain these facts from kernel credentials and runtime-checked SpringBoard APIs.

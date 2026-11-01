@@ -22,7 +22,7 @@ test('screenshot keeps annotations, disables touch, waits for keyboard and two v
   assert.match(controller, /willSend:\^BOOL[\s\S]*?screenshotSessionIsCurrent:generation[\s\S]*?sent = true/);
 });
 
-test('failure restores text composition, selection, handles, opacity, keyboard and interactions', () => {
+test('screenshot preparation preserves text composition and can restore presentation without focus', () => {
   const begin = section(label, '- (BOOL)beginSystemScreenshot', '- (void)endSystemScreenshotRestoringFocus:');
   const restore = section(label, '- (void)endSystemScreenshotRestoringFocus:', '- (void)hideEditingHandles');
   for (const value of ['text', 'selection', 'marked', 'firstResponder', 'inputView', 'accessoryView', 'closeHidden', 'rotateHidden', 'borderHidden', 'opacity'])
@@ -32,7 +32,7 @@ test('failure restores text composition, selection, handles, opacity, keyboard a
   assert.match(restore, /field\.attributedText = state\.text/);
   assert.match(restore, /setMarkedText:[\s\S]*?selectedRange:selected/);
   assert.match(restore, /field\.selectedTextRange = selection/);
-  assert.match(controller, /restoreScreenshotPresentationWithFocus:YES/);
+  assert.match(controller, /restoreScreenshotPresentationWithFocus:NO/);
   assert.match(controller, /_drawView\.userInteractionEnabled = _screenshotDrawingInteraction/);
   const draw = section(drawing, '- (BOOL)beginSystemScreenshot', '- (void)hideTextToolHandles');
   assert.doesNotMatch(draw, /removeAllObjects|clear\]|hideHandle\]|prepareForSnapshot/);
@@ -45,8 +45,20 @@ test('cancelled generations cannot send or close a later drawing session', () =>
   assert.match(manager, /UISceneWillDeactivateNotification, UISceneDidDisconnectNotification/);
   assert.match(manager, /UIApplicationWillResignActiveNotification[\s\S]*?\[\[RBManager shared\] dismiss\]/);
   assert.match(controller, /screenshotHostDidDeactivate:[\s\S]*?notification\.object == self\.view\.window\.windowScene\) \[self cancelPendingScreenshot\]/);
-  assert.match(controller, /result == RBScreenshotSucceeded[\s\S]*?dismissFromUser/);
+  assert.match(controller, /result == RBScreenshotSucceeded\) \[self finishScreenshot\]/);
   assert.match(transport, /if \(current\) current = willSend && willSend\(\)/);
+});
+
+test('screenshot completion, rejection, uncertainty and timeout close the active canvas', () => {
+  const start = section(controller, '- (void)screenshotTapped:', '- (void)screenshotKeyboardSettled:');
+  const frame = section(controller, '- (void)screenshotFrame:', '- (void)systemScreenshotTaken:');
+  const finish = section(controller, '- (void)finishScreenshot', '#pragma mark - settings');
+  assert.match(start, /dispatch_after[\s\S]*?screenshotSessionIsCurrent:generation[\s\S]*?finishScreenshot/);
+  assert.match(frame, /systemUptime >= _screenshotDeadline[\s\S]*?finishScreenshot/);
+  assert.match(frame, /RBScreenshotAcknowledge[\s\S]*?result != RBScreenshotPending\) \[controller finishScreenshot\]/);
+  assert.match(finish, /screenshotSessionIsCurrent:[\s\S]*?RBScreenshotCancel[\s\S]*?restoreScreenshotPresentationWithFocus:NO[\s\S]*?dismissFromUser/);
+  assert.doesNotMatch(finish, /restoreScreenshotPresentationWithFocus:YES/);
+  assert.match(controller, /accessibilityHint = @"[^"\n]*截图结束后关闭画板并丢弃未保存的绘图"/);
 });
 
 test('only dedicated audit transport can invoke SpringBoard capture, without resend', () => {

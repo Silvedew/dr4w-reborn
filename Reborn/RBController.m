@@ -63,7 +63,6 @@
     NSUInteger _screenshotFrames;
     NSArray<UIView *> *_screenshotChrome;
     NSArray<NSNumber *> *_screenshotChromeHidden;
-    UILabel *_screenshotMessage;
 
 }
 
@@ -161,7 +160,7 @@
     _clear = [self barButton:@"trash" label:@"清空画板" action:@selector(clearTapped:)];
     _close = [self barButton:@"xmark" label:@"关闭画板" action:@selector(closeTapped:)];
     _screenshot = [self barButton:@"camera" label:@"保存系统截图" action:@selector(screenshotTapped:)];
-    _screenshot.accessibilityHint = @"隐藏工具栏后保存带标注的系统截图，成功后关闭画板";
+    _screenshot.accessibilityHint = @"隐藏工具栏后保存带标注的系统截图，截图结束后关闭画板并丢弃未保存的绘图";
     _barButtons = @[_close, _clear, _brush, _undo, _screenshot, _gear];
     for (UIButton *button in _barButtons) [_barScroll addSubview:button];
 
@@ -346,8 +345,6 @@
     if (![[RBManager shared] isActiveDrawingController:self] || !RBScreenshotBegin(&_screenshotSession)) return;
     uint64_t generation = _screenshotSession.generation;
     _screenshotDeadline = NSProcessInfo.processInfo.systemUptime + 3.0;
-    [_screenshotMessage removeFromSuperview];
-    _screenshotMessage = nil;
     NSMutableArray *chrome = [NSMutableArray arrayWithObject:_bar];
     if (_brushPanel) [chrome addObjectsFromArray:@[_brushPanel.view, _brushDismissArea]];
     if (_settingsPanel) [chrome addObjectsFromArray:@[_settingsPanel.view, _settingsDismissArea]];
@@ -369,7 +366,7 @@
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         RBController *controller = weakSelf;
         if ([controller screenshotSessionIsCurrent:generation])
-            [controller finishScreenshot:RBScreenshotExpired(&controller->_screenshotSession)];
+            [controller finishScreenshot];
     });
 }
 
@@ -401,7 +398,7 @@
     [displayLink invalidate];
     _screenshotDisplayLink = nil;
     if (NSProcessInfo.processInfo.systemUptime >= _screenshotDeadline) {
-        [self finishScreenshot:RBScreenshotRejected];
+        [self finishScreenshot];
         return;
     }
     uint64_t generation = _screenshotSession.generation;
@@ -417,7 +414,7 @@
             RBController *controller = weakSelf;
             if (![controller screenshotSessionIsCurrent:generation]) return;
             RBScreenshotResult result = RBScreenshotAcknowledge(&controller->_screenshotSession, reply);
-            if (result != RBScreenshotPending) [controller finishScreenshot:result];
+            if (result != RBScreenshotPending) [controller finishScreenshot];
         }];
 }
 
@@ -425,7 +422,7 @@
     if (![self screenshotSessionIsCurrent:_screenshotSession.generation]) return;
     // UIKit exposes no request identifier; a simultaneous hardware screenshot cannot be distinguished.
     RBScreenshotResult result = RBScreenshotObserved(&_screenshotSession);
-    if (result == RBScreenshotSucceeded) [self finishScreenshot:result];
+    if (result == RBScreenshotSucceeded) [self finishScreenshot];
 }
 
 - (void)restoreScreenshotPresentationWithFocus:(BOOL)restoreFocus {
@@ -451,35 +448,11 @@
         notification.object == self.view.window.windowScene) [self cancelPendingScreenshot];
 }
 
-- (void)finishScreenshot:(RBScreenshotResult)result {
+- (void)finishScreenshot {
     if (![self screenshotSessionIsCurrent:_screenshotSession.generation]) return;
     RBScreenshotCancel(&_screenshotSession);
-    if (result == RBScreenshotSucceeded) {
-        [self restoreScreenshotPresentationWithFocus:NO];
-        [[RBManager shared] dismissFromUser];
-        return;
-    }
-    [self restoreScreenshotPresentationWithFocus:YES];
-    NSString *message = result == RBScreenshotUncertain ? @"截图状态不确定，请查看系统截图后再操作" :
-        @"系统截图未完成，画板已恢复";
-    // A nonmodal notice preserves the text field's focus and marked text after a failed capture.
-    UILabel *notice = [[UILabel alloc] initWithFrame:CGRectZero];
-    notice.text = message;
-    notice.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
-    notice.textColor = UIColor.labelColor;
-    notice.backgroundColor = UIColor.secondarySystemBackgroundColor;
-    notice.textAlignment = NSTextAlignmentCenter;
-    notice.numberOfLines = 0;
-    notice.layer.cornerRadius = 12;
-    notice.clipsToBounds = YES;
-    CGRect safe = UIEdgeInsetsInsetRect(self.view.bounds, self.view.safeAreaInsets);
-    notice.frame = CGRectMake(CGRectGetMinX(safe) + 16, CGRectGetMinY(safe) + 12, MAX(0, safe.size.width - 32), 64);
-    _screenshotMessage = notice;
-    [self.view addSubview:notice];
-    UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, message);
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        [notice removeFromSuperview];
-    });
+    [self restoreScreenshotPresentationWithFocus:NO];
+    [[RBManager shared] dismissFromUser];
 }
 
 

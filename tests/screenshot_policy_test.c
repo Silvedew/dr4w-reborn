@@ -29,22 +29,19 @@ static void sessions(void) {
     uint64_t first = session.generation;
     assert(!RBScreenshotBegin(&session));
     assert(RBScreenshotAcknowledge(&session, RBScreenshotRejected) == RBScreenshotRejected);
-    assert(RBScreenshotObserved(&session) == RBScreenshotPending && !session.observed);
-    assert(RBScreenshotExpired(&session) == RBScreenshotRejected);
-    session.sent = true;
     assert(RBScreenshotObserved(&session) == RBScreenshotPending);
-    assert(RBScreenshotAcknowledge(&session, RBScreenshotAccepted) == RBScreenshotSucceeded);
+    session.sent = true;
+    assert(RBScreenshotObserved(&session) == RBScreenshotSucceeded);
     RBScreenshotCancel(&session);
     assert(!RBScreenshotIsCurrent(&session, first));
     assert(RBScreenshotObserved(&session) == RBScreenshotPending);
     assert(RBScreenshotAcknowledge(&session, RBScreenshotAccepted) == RBScreenshotPending);
     assert(RBScreenshotBegin(&session));
     assert(!RBScreenshotIsCurrent(&session, first));
-    assert(!session.observed && !session.accepted && !session.sent);
+    assert(!session.sent);
     session.sent = true;
     assert(RBScreenshotAcknowledge(&session, RBScreenshotAccepted) == RBScreenshotPending);
     assert(RBScreenshotObserved(&session) == RBScreenshotSucceeded);
-    assert(RBScreenshotExpired(&session) == RBScreenshotUncertain);
     assert(RBScreenshotAcknowledge(&session, RBScreenshotUncertain) == RBScreenshotUncertain);
     assert(RBScreenshotAcknowledge(&session, RBScreenshotRejected) == RBScreenshotRejected);
 }

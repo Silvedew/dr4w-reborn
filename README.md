@@ -39,8 +39,9 @@ control                 deb metadata
 - Tool / colour / width picker inside the panel (no Preference bundle needed)
 - Screenshot: captures the screen with the drawing overlaid; the toolbar and text
   selection border are temporarily hidden and the keyboard is dismissed during
-  capture. A successful capture closes drawing. Screenshot access is audited only
-  for enabled foreground apps.
+  capture. When the screenshot attempt ends, drawing closes and unsaved drawing
+  is discarded, including on failure. Screenshot access is audited only for
+  enabled foreground apps.
 - Summon / dismiss with **Volume Up -> Volume Down** (within 0.9 s, device unlocked)
 - Settings -> 全局画板: master switch, home-screen switch, volume shortcut,
   and an App 启用 list with native app icons and hidden-component filtering
@@ -110,11 +111,11 @@ confirmation because it closes the canvas and floating ball. App directory loadi
 runs off the SpringBoard main thread, and the search panel avoids the keyboard.
 
 The Screenshot action captures the screen with the drawing annotation, temporarily
-hiding the toolbar and text selection border and dismissing the keyboard. On success
-it closes the drawing panel. On failure or an unconfirmed result, the editing state
-is restored and no automatic retry is made. Access is audited for enabled foreground
-processes; the system screenshot notification does not guarantee the image has been
-saved to Photos.
+hiding the toolbar and text selection border and dismissing the keyboard. The drawing
+panel closes when the attempt ends, including on failure or an unconfirmed result;
+unsaved drawing is discarded and no automatic retry is made. Access is audited for
+enabled foreground processes; the system screenshot notification does not guarantee
+the image has been saved to Photos.
 iPadOS 15.1 permissions and the full capture flow still need true-device acceptance.
 
 The Pencil button opens a 60 pt wide vertical panel with four icon-only color

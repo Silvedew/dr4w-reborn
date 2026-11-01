@@ -158,9 +158,11 @@ they do not establish real App Store sandbox/IPC behavior.
 22. Verify Screenshot on iPadOS 15.1 with permission prompts visible. In an enabled
     foreground app, draw and add text, then capture. The image must contain the app
     screen and drawing annotation, without the toolbar, keyboard or text-selection
-    border. Successful capture closes drawing. On a denied permission, failed capture
-    or unconfirmed result, verify the toolbar/editor/keyboard state returns and no
-    automatic second capture occurs. Confirm that seeing a system screenshot
+    border. The screenshot notification closes drawing immediately, even if the
+    service acknowledgement has not arrived. On a denied permission, failed capture
+    or unconfirmed result, verify drawing closes, unsaved work is discarded, and no
+    automatic second capture occurs. Reopen drawing and verify a late response from
+    the previous attempt does not close it. Confirm that seeing a system screenshot
     notification does not guarantee the image was saved to Photos. From a background
     process and an app that is not enabled, verify
     capture requests are rejected; also reject a request that supplies a forged

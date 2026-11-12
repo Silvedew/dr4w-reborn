@@ -66,6 +66,7 @@ test('pencil-only setting is shared and routes only canvas hits', () => {
 
 test('test builds keep the installable artifact without publishing releases or the Sileo source', () => {
   const workflow = source('.github/workflows/build.yml');
+  assert.match(workflow, /runs-on: macos-15/);
   for (const name of ['Publish release (raw .deb)', 'Publish Sileo repo (gh-pages)']) {
     const start = workflow.indexOf(`- name: ${name}`);
     assert.notEqual(start, -1);

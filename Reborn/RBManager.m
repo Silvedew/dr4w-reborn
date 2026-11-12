@@ -140,6 +140,7 @@ CGRect RBHostBounds(void) {
     w.hidden = NO;
     [w makeKeyAndVisible];
     _window = w;
+    [w updatePencilRouting];
     RBDiagnostic(@"present.shown", scene ? @"scene=active" : @"scene=legacy");
     RBStartLayoutPolling();
 
@@ -168,6 +169,7 @@ CGRect RBHostBounds(void) {
         if ([child isKindOfClass:RBBrushPopover.class]) [(RBBrushPopover *)child commitPendingChanges];
         if ([child isKindOfClass:RBSettingsPanel.class]) [(RBSettingsPanel *)child commitPendingChanges];
     }
+    [_window stopPencilRouting];
     _window.hidden = YES;
     _window.rootViewController = nil;
     _window = nil;
@@ -198,11 +200,13 @@ CGRect RBHostBounds(void) {
 
 - (void)layoutForCurrentHost {
     if (_window) _window.frame = [self currentHostBounds];
+    [_window updatePencilRouting];
     [[RBFloating shared] applyPrefs];
 }
 
 - (void)applySettings {
     [(RBController *)_window.rootViewController refreshToolbarPreferences];
+    [_window updatePencilRouting];
 }
 
 - (BOOL)isActiveDrawingController:(RBController *)controller {

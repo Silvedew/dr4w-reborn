@@ -59,9 +59,13 @@ test('pencil-only setting is shared and routes only canvas hits', () => {
   assert.match(controller, /drawingView = _drawView/);
   assert.match(window, /RBSettingBool\(@"pencilOnly", NO\)/);
   assert.match(window, /isDescendantOfView:self\.drawingView/);
-  assert.match(window, /event\.allTouches/);
-  assert.match(window, /if \(match\) return nil/);
-  assert.match(window, /match\.type == UITouchTypePencil \? hit : nil/);
+  assert.match(window, /allowedTouchTypes = @\[@\(UITouchTypePencil\)\]/);
+  assert.match(window, /cancelsTouchesInView = YES/);
+  for (const phase of ['Began', 'Moved', 'Ended', 'Cancelled'])
+    assert.match(window, new RegExp(`drawingView touches${phase}:`));
+  assert.match(window, /\[window addGestureRecognizer:gesture\]/);
+  assert.match(window, /removeGestureRecognizer:gesture/);
+  assert.doesNotMatch(window, /event\.allTouches/);
 });
 
 test('test builds keep the installable artifact without publishing releases or the Sileo source', () => {

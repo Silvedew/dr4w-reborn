@@ -1,23 +1,76 @@
 #import "RBWindow.h"
 #import "RBSettings.h"
-#include <math.h>
+#import <UIKit/UIGestureRecognizerSubclass.h>
 
-@implementation RBWindow
+@interface RBPencilGesture : UIGestureRecognizer
+@property (nonatomic, weak) UIView *drawingView;
+@property (nonatomic, weak) UITouch *activeTouch;
+@end
 
+@implementation RBPencilGesture
+- (instancetype)init {
+    if ((self = [super initWithTarget:nil action:NULL])) {
+        self.allowedTouchTypes = @[@(UITouchTypePencil)];
+        self.cancelsTouchesInView = YES;
+        self.delaysTouchesBegan = YES;
+    }
+    return self;
+}
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    UITouch *touch = touches.anyObject;
+    if (!touch || !self.drawingView.userInteractionEnabled) { self.state = UIGestureRecognizerStateFailed; return; }
+    self.activeTouch = touch;
+    [self.drawingView touchesBegan:[NSSet setWithObject:touch] withEvent:event];
+    self.state = UIGestureRecognizerStateBegan;
+}
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (!self.activeTouch || ![touches containsObject:self.activeTouch]) return;
+    [self.drawingView touchesMoved:[NSSet setWithObject:self.activeTouch] withEvent:event];
+    self.state = UIGestureRecognizerStateChanged;
+}
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (!self.activeTouch || ![touches containsObject:self.activeTouch]) return;
+    [self.drawingView touchesEnded:[NSSet setWithObject:self.activeTouch] withEvent:event];
+    self.activeTouch = nil;
+    self.state = UIGestureRecognizerStateEnded;
+}
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (self.activeTouch && [touches containsObject:self.activeTouch])
+        [self.drawingView touchesCancelled:[NSSet setWithObject:self.activeTouch] withEvent:event];
+    self.activeTouch = nil;
+    self.state = UIGestureRecognizerStateCancelled;
+}
+@end
+
+@implementation RBWindow {
+    NSMutableArray<RBPencilGesture *> *_pencilGestures;
+}
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     UIView *hit = [super hitTest:point withEvent:event];
-    if (!RBSettingBool(@"pencilOnly", NO) || !self.drawingView ||
-        !(hit == self.drawingView || [hit isDescendantOfView:self.drawingView])) return hit;
-
-    // A UIEvent may contain several touches; only use a touch at this hit-test point.
-    UITouch *match = nil;
-    for (UITouch *touch in event.allTouches) {
-        CGPoint location = [touch locationInView:self];
-        if (fabs(location.x - point.x) > 0.5 || fabs(location.y - point.y) > 0.5) continue;
-        if (match) return nil;
-        match = touch;
-    }
-    return match.type == UITouchTypePencil ? hit : nil;
+    if (RBSettingBool(@"pencilOnly", NO) && self.drawingView &&
+        (hit == self.drawingView || [hit isDescendantOfView:self.drawingView])) return nil;
+    return hit;
 }
-
+- (void)updatePencilRouting {
+    if (!RBSettingBool(@"pencilOnly", NO) || !self.drawingView || self.hidden) {
+        [self stopPencilRouting];
+        return;
+    }
+    if (!_pencilGestures) _pencilGestures = [NSMutableArray array];
+    NSArray<UIWindow *> *windows = self.windowScene ? self.windowScene.windows : UIApplication.sharedApplication.windows;
+    for (UIWindow *window in windows) {
+        if (window == self || window.hidden || window.windowLevel >= self.windowLevel) continue;
+        BOOL found = NO;
+        for (RBPencilGesture *gesture in _pencilGestures) if (gesture.view == window) { found = YES; break; }
+        if (found) continue;
+        RBPencilGesture *gesture = [RBPencilGesture new];
+        gesture.drawingView = self.drawingView;
+        [window addGestureRecognizer:gesture];
+        [_pencilGestures addObject:gesture];
+    }
+}
+- (void)stopPencilRouting {
+    for (RBPencilGesture *gesture in _pencilGestures) [gesture.view removeGestureRecognizer:gesture];
+    [_pencilGestures removeAllObjects];
+}
 @end

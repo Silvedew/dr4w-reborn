@@ -170,7 +170,11 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     if ([self.view.window isKindOfClass:RBWindow.class])
-        ((RBWindow *)self.view.window).drawingView = _drawView;
+    {
+        RBWindow *window = (RBWindow *)self.view.window;
+        window.drawingView = _drawView;
+        [window updatePencilRouting];
+    }
     UIEdgeInsets insets = self.view.safeAreaInsets;
     RBToolbarMetrics metrics = RBToolbarMetricsForScale(_toolbarScale);
     if (_initialToolbarAnchorWindow && self.view.window) {

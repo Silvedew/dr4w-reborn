@@ -14,6 +14,8 @@ including resting a hand on the screen; existing marks must stay fixed to the sc
 Verify toolbar and open panels still work with a finger, then turn the option off and
 verify finger drawing returns. Report which input fails if either drawing or passthrough
 does not work; hit-test event contents and cross-window routing require device validation.
+Regression: with the option on, verify the Pencil draws instead of scrolling or
+clicking the underlying app, and verify fingers still operate that app normally.
 
 1. Open Settings -> 全局画板. Confirm the master, home-screen, and volume-shortcut
    switches are on; there is no separate floating-ball switch. Existing app

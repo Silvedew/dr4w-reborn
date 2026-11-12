@@ -60,7 +60,7 @@ static void RBObserveAppListController(RBAppListController *controller) {
     [specifier setProperty:key forKey:@"key"];
     [specifier setProperty:@(value) forKey:@"default"];
     NSString *symbol = @{@"enabled": @RB_PENCIL_SYMBOL, @"homeEnabled": @"house",
-        @"volumeShortcutEnabled": @"speaker.wave.2"}[key];
+        @"volumeShortcutEnabled": @"speaker.wave.2", @"pencilOnly": @RB_PENCIL_SYMBOL}[key];
     if (symbol) {
         [specifier setProperty:RBSettingsIcon(symbol) forKey:@"iconImage"];
         [specifier setProperty:@YES forKey:@"rbMonochromeIcon"];
@@ -137,7 +137,8 @@ static void RBObserveAppListController(RBAppListController *controller) {
     [self publishSpecifiers:@[group,
         [self switchNamed:@"启用画板" key:@"enabled" defaultValue:YES], launch,
         [self switchNamed:@"在主屏幕启用" key:@"homeEnabled" defaultValue:YES],
-        [self switchNamed:@"音量快捷键" key:@"volumeShortcutEnabled" defaultValue:YES], appGroup, apps]];
+        [self switchNamed:@"音量快捷键" key:@"volumeShortcutEnabled" defaultValue:YES],
+        [self switchNamed:@"仅使用 Apple Pencil 涂鸦" key:@"pencilOnly" defaultValue:NO], appGroup, apps]];
     return self.rbSpecifiers;
 }
 @end

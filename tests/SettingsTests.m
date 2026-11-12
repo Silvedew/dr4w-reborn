@@ -21,6 +21,13 @@ int main(void) {
             assert(!RBWriteSetting(@"toolbarScale", invalid));
         assert([RBSetting(@"toolbarScale", nil) doubleValue] == 1.5);
         assert(RBWriteSetting(@"toolbarScale", nil));
+        assert(RBWriteSetting(@"pencilOnly", nil));
+        assert(!RBSettingBool(@"pencilOnly", NO));
+        assert(RBWriteSetting(@"pencilOnly", @YES));
+        assert(RBSettingBool(@"pencilOnly", NO));
+        assert(!RBWriteSetting(@"pencilOnly", @2));
+        assert(RBWriteSetting(@"pencilOnly", @NO));
+        assert(!RBSettingBool(@"pencilOnly", YES));
         assert(RBWriteSetting(@"toolbarPositions", @{
             @"test.reader": @{@"x":@0.2, @"y":@0.8},
             @"test.invalid": @{@"x":@2, @"y":@0},

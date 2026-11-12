@@ -24,7 +24,7 @@ test('settings main menu exposes only settings entries and maps each row correct
   const literals = [...mainTitles.matchAll(/@"([^"]*)"/g)].map(match => match[1])
     .filter(value => value !== 'com.apple.springboard');
   assert.deepEqual(literals, [
-    '工具：%@', '悬浮球大小', '悬浮球透明度', '竖栏大小', 'App 管理', '本次使用隐藏圆球',
+    '工具：%@', '悬浮球大小', '悬浮球透明度', '竖栏大小', 'App 管理', '仅使用 Apple Pencil 涂鸦', '本次使用隐藏圆球',
   ]);
   assert.match(mainTitles, /if \(!\[NSBundle\.mainBundle\.bundleIdentifier isEqualToString:@"com\.apple\.springboard"\]\)\s*\[titles addObject:@"本次使用隐藏圆球"\]/);
   assert.doesNotMatch(header + panel, /brushHandler|clearHandler|画笔设置|一键清屏/);
@@ -49,6 +49,31 @@ test('settings main menu exposes only settings entries and maps each row correct
   assert.doesNotMatch(rowSwitch, /clear|brush/);
 });
 
+test('pencil-only setting is shared and routes only canvas hits', () => {
+  const panel = source('Reborn/RBSettingsPanel.m');
+  const preferences = source('Preferences/RBRootListController.m');
+  const window = source('Reborn/RBWindow.m');
+  const controller = source('Reborn/RBController.m');
+  assert.match(preferences, /switchNamed:@"仅使用 Apple Pencil 涂鸦" key:@"pencilOnly" defaultValue:NO/);
+  assert.match(panel, /RBWriteSetting\(@"pencilOnly", @\(toggle\.on\)\)/);
+  assert.match(controller, /drawingView = _drawView/);
+  assert.match(window, /RBSettingBool\(@"pencilOnly", NO\)/);
+  assert.match(window, /isDescendantOfView:self\.drawingView/);
+  assert.match(window, /event\.allTouches/);
+  assert.match(window, /if \(match\) return nil/);
+  assert.match(window, /match\.type == UITouchTypePencil \? hit : nil/);
+});
+
+test('test builds keep the installable artifact without publishing releases or the Sileo source', () => {
+  const workflow = source('.github/workflows/build.yml');
+  for (const name of ['Publish release (raw .deb)', 'Publish Sileo repo (gh-pages)']) {
+    const start = workflow.indexOf(`- name: ${name}`);
+    assert.notEqual(start, -1);
+    assert.match(workflow.slice(start, start + 160), /!contains\(github\.event\.head_commit\.message, '\[test-build\]'\)/);
+  }
+  assert.match(workflow, /uses: actions\/upload-artifact@v4/);
+});
+
 test('settings panel labels are shortened and only app deactivation stays destructive', () => {
   const panel = source('Reborn/RBSettingsPanel.m');
   const pageTitle = methodBody(panel, '- (void)showPage:(RBSettingsPage)page');
@@ -59,7 +84,7 @@ test('settings panel labels are shortened and only app deactivation stays destru
   const titleForRow = methodBody(panel, '- (NSString *)titleForRow:(NSInteger)row selected:(BOOL *)selected');
   assert.match(titleForRow, /_page == RBSettingsDisableConfirmation[\s\S]*?row == 1 \? @"取消，保留绘图" : @"停用并关闭画板"/);
   const cell = methodBody(panel, '- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)path');
-  assert.doesNotMatch(cell, /_page == RBSettingsMain && path\.row/);
+  assert.match(cell, /_page == RBSettingsMain && path\.row == 5[\s\S]*?RBSettingBool\(@"pencilOnly", NO\)/);
   assert.match(cell, /_page == RBSettingsDisableConfirmation && path\.row == 2[\s\S]*?UIColor\.systemRedColor/);
   const rowTapped = methodBody(panel, '- (void)rowTapped:(UIButton *)sender');
   assert.match(rowTapped, /if \(row == 1\) \{ \[self cancelPendingConfirmation\]; \[self showPage:RBSettingsApplications\]; return; \}/);

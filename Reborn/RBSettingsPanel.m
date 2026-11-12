@@ -228,6 +228,8 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
     NSString *text = [self titleForRow:row selected:NULL];
     if (_page == RBSettingsTools || _page == RBSettingsBallSize || _page == RBSettingsBallAlpha)
         text = [text stringByAppendingString:@" ✓"];
+    if (_page == RBSettingsMain && row == 5)
+        return MAX(52, [self textHeight:text font:body width:width - 100] + 20);
     return MAX(52, [self textHeight:text font:body width:width - 40] + 20);
 }
 - (RBSettingsPanelSize)measureContentTarget {
@@ -252,7 +254,7 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
             NSString *text = [self titleForRow:row selected:NULL];
             if (_page == RBSettingsTools || _page == RBSettingsBallSize || _page == RBSettingsBallAlpha)
                 text = [text stringByAppendingString:@" ✓"];
-            width = MAX(width, [self textWidth:text font:body] + 40);
+            width = MAX(width, [self textWidth:text font:body] + ((_page == RBSettingsMain && row == 5) ? 100 : 40));
         }
     }
     width = MIN(RBSettingsPanelWidth, ceil(width));
@@ -320,7 +322,7 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
 }
 - (NSArray<NSString *> *)mainTitles {
     NSMutableArray *titles = [@[[NSString stringWithFormat:@"工具：%@", [RBPrefs toolName]],
-        @"悬浮球大小", @"悬浮球透明度", @"竖栏大小", @"App 管理"] mutableCopy];
+        @"悬浮球大小", @"悬浮球透明度", @"竖栏大小", @"App 管理", @"仅使用 Apple Pencil 涂鸦"] mutableCopy];
     if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) [titles addObject:@"本次使用隐藏圆球"];
     return titles;
 }
@@ -387,6 +389,19 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
         toggle.accessibilityLabel = [NSString stringWithFormat:@"%@，%@，启用悬浮球", name, bundle];
         return cell;
     }
+    if (_page == RBSettingsMain && path.row == 5) {
+        cell.textLabel.text = @"仅使用 Apple Pencil 涂鸦";
+        cell.textLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+        cell.textLabel.adjustsFontForContentSizeCategory = YES;
+        cell.textLabel.numberOfLines = 0;
+        cell.textLabel.textColor = UIColor.labelColor;
+        UISwitch *toggle = [UISwitch new];
+        toggle.on = RBSettingBool(@"pencilOnly", NO);
+        toggle.accessibilityLabel = cell.textLabel.text;
+        [toggle addTarget:self action:@selector(pencilOnlyChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = toggle;
+        return cell;
+    }
     if (_page == RBSettingsToolbarSize) {
         _scaleLabel = [UILabel new];
         _scaleLabel.numberOfLines = 0;
@@ -443,6 +458,12 @@ typedef NS_ENUM(NSInteger, RBSettingsPage) {
         [button.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-2]
     ]];
     return cell;
+}
+- (void)pencilOnlyChanged:(UISwitch *)toggle {
+    if (!RBWriteSetting(@"pencilOnly", @(toggle.on))) {
+        [toggle setOn:!toggle.on animated:YES];
+        UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, @"设置未保存，请重试");
+    }
 }
 - (void)rowTapped:(UIButton *)sender {
     NSInteger row = sender.tag;

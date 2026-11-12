@@ -77,7 +77,9 @@ static BOOL RBMergeToolbarPosition(NSString *bundleID, NSDictionary *position) {
 static BOOL RBWritableDrawingKey(NSString *key, id value) {
     if (![key isKindOfClass:NSString.class]) return NO;
     NSArray *keys = @[@"toolIndex", @"colorIndex", @"hasCustom", @"cR", @"cG", @"cB", @"cA",
-        @"widthIndex", @"strokeWidth", @"floatX", @"floatY", @"ballSize", @"ballAlpha", @"toolbarScale"];
+        @"widthIndex", @"strokeWidth", @"floatX", @"floatY", @"ballSize", @"ballAlpha", @"toolbarScale", @"pencilOnly"];
+    if ([key isEqual:@"pencilOnly"] && value && (![value isKindOfClass:NSNumber.class] ||
+        ([value doubleValue] != 0 && [value doubleValue] != 1))) return NO;
     if ([key isEqual:@"toolbarScale"] && value && (![value isKindOfClass:NSNumber.class] ||
         !isfinite([value doubleValue]) || [value doubleValue] < 0.6 || [value doubleValue] > 1.5)) return NO;
     if ([key isEqual:@"strokeWidth"] && value && (![value isKindOfClass:NSNumber.class] ||
@@ -450,7 +452,7 @@ void RBObserveSnapshot(void (^callback)(void)) {
 }
 
 BOOL RBStoreSetting(NSString *key, id value) {
-    if ([key isEqual:@"toolbarScale"] && !RBWritableDrawingKey(key, value)) return NO;
+    if (([key isEqual:@"toolbarScale"] || [key isEqual:@"pencilOnly"]) && !RBWritableDrawingKey(key, value)) return NO;
     if (!RBSandboxPreferences()) {
         [RBPreferences() setObject:value forKey:key];
         return RBSignalSettingsChanged();

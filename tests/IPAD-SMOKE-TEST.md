@@ -6,6 +6,15 @@ Use one system app and at least two sandboxed third-party apps (for example,
 Quark HD and Eudic if installed). Native CI settings tests use a Cephei test double;
 they do not establish real App Store sandbox/IPC behavior.
 
+Apple Pencil prototype: enable “仅使用 Apple Pencil 涂鸦” in both settings surfaces
+and check that they stay synchronized after reopening and restarting apps. On the
+home screen and in two apps, draw with Pencil while using a finger to tap, drag,
+scroll and pinch the underlying interface. Test Pencil and fingers simultaneously,
+including resting a hand on the screen; existing marks must stay fixed to the screen.
+Verify toolbar and open panels still work with a finger, then turn the option off and
+verify finger drawing returns. Report which input fails if either drawing or passthrough
+does not work; hit-test event contents and cross-window routing require device validation.
+
 1. Open Settings -> 全局画板. Confirm the master, home-screen, and volume-shortcut
    switches are on; there is no separate floating-ball switch. Existing app
    selections must survive upgrading. In App 启用, enable one app and leave

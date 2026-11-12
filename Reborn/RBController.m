@@ -10,6 +10,7 @@
 #import "RBSettingsPanelLayout.h"
 #import "RBBrushLayout.h"
 #import "RBSettings.h"
+#import "RBWindow.h"
 #import "RBScreenshotPolicy.h"
 
 #import "ACEDrawingView.h"
@@ -168,6 +169,8 @@
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    if ([self.view.window isKindOfClass:RBWindow.class])
+        ((RBWindow *)self.view.window).drawingView = _drawView;
     UIEdgeInsets insets = self.view.safeAreaInsets;
     RBToolbarMetrics metrics = RBToolbarMetricsForScale(_toolbarScale);
     if (_initialToolbarAnchorWindow && self.view.window) {

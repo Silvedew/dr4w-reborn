@@ -171,6 +171,10 @@ int main(int argc, const char *argv[]) {
         assert(!RBWritableDrawingKey(@"strokeWidth", @0));
         assert(!RBWritableDrawingKey(@"strokeWidth", @31));
         assert(!RBWritableDrawingKey(@"strokeWidth", @1.5));
+        assert(RBWritableDrawingKey(@"pencilOnly", @YES));
+        assert(RBWritableDrawingKey(@"pencilOnly", @NO));
+        assert(!RBWritableDrawingKey(@"pencilOnly", @2));
+        assert(!RBWritableDrawingKey(@"pencilOnly", @"yes"));
         for (id invalid in @[@0.59, @1.51, @(NAN), @(INFINITY), @"1.0"])
             assert(!RBWritableDrawingKey(@"toolbarScale", invalid));
         assert(!RBBridgeRequest(@{@"domain":gTestDomain, @"operation":@"appEnabled",
@@ -242,6 +246,10 @@ int main(int argc, const char *argv[]) {
         assert(enabledApps.count == 3 && [enabledApps containsObject:@"test.concurrent.a"] &&
             [enabledApps containsObject:@"test.concurrent.b"]);
         assert(RBWriteSetting(@"toolbarScale", @0.6));
+        assert(RBWriteSetting(@"pencilOnly", @YES));
+        PumpUntil(^BOOL {
+            return [RBBridgeRequest(Request(@"read"))[@"values"][@"pencilOnly"] boolValue];
+        });
         assert(RBWriteSetting(@"toolbarScale", @1.5));
         PumpUntil(^BOOL {
             return [RBBridgeRequest(Request(@"read"))[@"values"][@"toolbarScale"] isEqual:@1.5];

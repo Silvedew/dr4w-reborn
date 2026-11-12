@@ -210,15 +210,17 @@ static PSSpecifier *RowForApp(NSArray *rows, NSString *bundleID) {
 
 int main(void) {
     @autoreleasepool {
-        for (NSString *key in @[@"enabledApps", @"showBall"]) assert(RBWriteSetting(key, nil));
+        for (NSString *key in @[@"enabledApps", @"showBall", @"pencilOnly"]) assert(RBWriteSetting(key, nil));
         RBRootListController *root = [RBRootListController new];
         NSArray *rows = root.specifiers;
-        assert(rows.count == 7); // Three sections, three switches, installed-app link.
+        assert(rows.count == 8); // Three sections, four switches, installed-app link.
         assert(root.tableSpecifiers.count == rows.count); // Old code leaves this empty.
         assert(root.publishCount == 1);
         assert(root.specifiers == rows);
         assert(root.publishCount == 1); // Repeated access must not rebuild the table.
         assert([[root readPreferenceValue:rows[1]] boolValue]);
+        assert([[rows[5] propertyForKey:@"key"] isEqualToString:@"pencilOnly"]);
+        assert(![[root readPreferenceValue:rows[5]] boolValue]);
         UITableViewCell *pluginCell = [root tableView:nil cellForRowAtIndexPath:[NSIndexPath indexPathWithIndex:1]];
         assert(pluginCell.imageView.tintColor != nil);
         assert([[rows.lastObject propertyForKey:@"label"] isEqualToString:@"App 启用"]);
@@ -350,9 +352,9 @@ int main(void) {
         assert([gIconReads[@"test.noicon"] integerValue] == 1);
 
         [root reloadSpecifiers];
-        assert(root.specifiers.count == 7);
+        assert(root.specifiers.count == 8);
         assert(root.publishCount == 2);
-        assert(root.tableSpecifiers.count == 7);
+        assert(root.tableSpecifiers.count == 8);
         gInstalledApps = @[];
         [apps reloadSpecifiers];
         assert(apps.specifiers.count == 1); // A visible explanation, not a blank page.

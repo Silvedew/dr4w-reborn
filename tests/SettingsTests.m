@@ -11,10 +11,13 @@ int main(void) {
         NSArray *originalTouches = @[@0, @1, pencil, @3];
         NSArray *fingerTouches = RBPencilFilteredTouchTypes(originalTouches, pencil);
         assert(([fingerTouches isEqualToArray:@[@0, @1, @3]]));
+        assert(([originalTouches isEqualToArray:@[@0, @1, pencil, @3]]));
+        assert(([RBPencilFilteredTouchTypes(@[@0, pencil, pencil], pencil) isEqualToArray:@[@0]]));
         assert(RBPencilFilteredTouchTypes(@[@0, @1], pencil) == nil);
         assert(([RBPencilFilteredTouchTypes(@[pencil], pencil) isEqualToArray:@[]]));
         assert(RBPencilShouldRestoreTouchTypes(fingerTouches, originalTouches, pencil));
         assert(!RBPencilShouldRestoreTouchTypes(@[@0], originalTouches, pencil));
+        assert(!RBPencilShouldRestoreTouchTypes(@[@0, @1, @3, @4], originalTouches, pencil));
         assert(!RBPencilShouldRestoreTouchTypes(@[@0], @[@0], pencil));
         // Existing Settings writes must be retained when the backend changes.
         CFPreferencesSetValue(CFSTR("enabledApps"), (__bridge CFArrayRef)@[@"test.legacy"],

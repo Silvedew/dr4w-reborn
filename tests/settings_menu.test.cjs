@@ -66,8 +66,9 @@ test('pencil-only setting is shared and routes only canvas hits', () => {
   assert.match(window, /\[window addGestureRecognizer:gesture\]/);
   assert.match(window, /removeGestureRecognizer:gesture/);
   assert.doesNotMatch(window, /event\.allTouches/);
-  assert.match(window, /excludePencilFromHostPansAtPoint:point event:event/);
-  assert.match(window, /isKindOfClass:UIPanGestureRecognizer\.class/);
+  assert.match(window, /excludePencilFromHostGesturesAtPoint:point event:event/);
+  assert.match(window, /if \(\[gesture isKindOfClass:RBPencilGesture\.class\]\) continue/);
+  assert.doesNotMatch(window, /isKindOfClass:UIPanGestureRecognizer\.class/);
   assert.match(window, /RBPencilFilteredTouchTypes\(current, @\(UITouchTypePencil\)\)/);
   assert.match(window, /RBPencilShouldRestoreTouchTypes\(gesture\.allowedTouchTypes, original/);
 });

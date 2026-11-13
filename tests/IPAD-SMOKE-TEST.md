@@ -19,6 +19,10 @@ clicking the underlying app, and verify fingers still operate that app normally.
 Draw over a scrolling page with Pencil and verify the page does not move; then
 scroll it with a finger, including while the Pencil is down. Toggle the option off
 and close the canvas to verify the host app's Pencil scrolling returns to normal.
+In Momo flash cards' review screen, draw horizontally and vertically using only
+Pencil: cards must not advance or scroll. Finger swipes must still advance cards,
+including while Pencil is drawing. Also verify normal app gesture behavior returns
+after disabling Pencil-only mode or closing the canvas.
 
 1. Open Settings -> 全局画板. Confirm the master, home-screen, and volume-shortcut
    switches are on; there is no separate floating-ball switch. Existing app

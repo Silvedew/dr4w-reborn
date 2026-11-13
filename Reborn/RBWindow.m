@@ -1,5 +1,6 @@
 #import "RBWindow.h"
 #import "RBSettings.h"
+#import "RBPencilTouchPolicy.h"
 #import <UIKit/UIGestureRecognizerSubclass.h>
 
 @interface RBPencilGesture : UIGestureRecognizer
@@ -44,12 +45,35 @@
 
 @implementation RBWindow {
     NSMutableArray<RBPencilGesture *> *_pencilGestures;
+    NSMapTable<UIGestureRecognizer *, NSArray<NSNumber *> *> *_panTouchTypes;
 }
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     UIView *hit = [super hitTest:point withEvent:event];
     if (RBSettingBool(@"pencilOnly", NO) && self.drawingView &&
-        (hit == self.drawingView || [hit isDescendantOfView:self.drawingView])) return nil;
+        (hit == self.drawingView || [hit isDescendantOfView:self.drawingView])) {
+        [self excludePencilFromHostPansAtPoint:point event:event];
+        return nil;
+    }
     return hit;
+}
+- (void)excludePencilFromHostPansAtPoint:(CGPoint)point event:(UIEvent *)event {
+    if (!_panTouchTypes) _panTouchTypes = [NSMapTable weakToStrongObjectsMapTable];
+    NSArray<UIWindow *> *windows = self.windowScene ? self.windowScene.windows : UIApplication.sharedApplication.windows;
+    for (UIWindow *window in windows) {
+        if (window == self || window.hidden || window.windowLevel >= self.windowLevel) continue;
+        CGPoint hostPoint = [self convertPoint:point toWindow:window];
+        UIView *view = [window hitTest:hostPoint withEvent:event];
+        for (; view; view = view.superview) {
+            for (UIGestureRecognizer *gesture in view.gestureRecognizers) {
+                if (![gesture isKindOfClass:UIPanGestureRecognizer.class]) continue;
+                NSArray *current = gesture.allowedTouchTypes;
+                NSArray *filtered = RBPencilFilteredTouchTypes(current, @(UITouchTypePencil));
+                if (!filtered) continue;
+                [_panTouchTypes setObject:[current copy] forKey:gesture];
+                gesture.allowedTouchTypes = filtered;
+            }
+        }
+    }
 }
 - (void)updatePencilRouting {
     if (!RBSettingBool(@"pencilOnly", NO) || !self.drawingView || self.hidden) {
@@ -70,6 +94,12 @@
     }
 }
 - (void)stopPencilRouting {
+    for (UIGestureRecognizer *gesture in _panTouchTypes) {
+        NSArray *original = [_panTouchTypes objectForKey:gesture];
+        if (RBPencilShouldRestoreTouchTypes(gesture.allowedTouchTypes, original, @(UITouchTypePencil)))
+            gesture.allowedTouchTypes = original;
+    }
+    [_panTouchTypes removeAllObjects];
     for (RBPencilGesture *gesture in _pencilGestures) [gesture.view removeGestureRecognizer:gesture];
     [_pencilGestures removeAllObjects];
 }

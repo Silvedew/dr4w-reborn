@@ -1,11 +1,21 @@
 #define RB_SETTINGS_DOMAIN @"com.dsh.dr4wreborn.ci-tests"
 #import "RBSettings.h"
+#import "RBPencilTouchPolicy.h"
 #import "../Shared/RBSettingsStore.m"
 #import <CoreFoundation/CoreFoundation.h>
 #include <assert.h>
 
 int main(void) {
     @autoreleasepool {
+        NSNumber *pencil = @2;
+        NSArray *originalTouches = @[@0, @1, pencil, @3];
+        NSArray *fingerTouches = RBPencilFilteredTouchTypes(originalTouches, pencil);
+        assert(([fingerTouches isEqualToArray:@[@0, @1, @3]]));
+        assert(RBPencilFilteredTouchTypes(@[@0, @1], pencil) == nil);
+        assert(([RBPencilFilteredTouchTypes(@[pencil], pencil) isEqualToArray:@[]]));
+        assert(RBPencilShouldRestoreTouchTypes(fingerTouches, originalTouches, pencil));
+        assert(!RBPencilShouldRestoreTouchTypes(@[@0], originalTouches, pencil));
+        assert(!RBPencilShouldRestoreTouchTypes(@[@0], @[@0], pencil));
         // Existing Settings writes must be retained when the backend changes.
         CFPreferencesSetValue(CFSTR("enabledApps"), (__bridge CFArrayRef)@[@"test.legacy"],
             (__bridge CFStringRef)RB_SETTINGS_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
